@@ -1,0 +1,251 @@
+# TEJAS — Project Task Tracker
+
+This file tracks all phases and tasks for the TEJAS project. Use this to jump back into development at any session.
+
+**Legend:** `[x]` = done, `[/]` = in progress, `[ ]` = not started
+
+---
+
+## Phase 0: Project Setup & Data Acquisition
+- [x] Create project repository and initial structure
+- [x] Write CONTEXT.md (project philosophy, architecture, constraints)
+- [x] Write data_used.md (file-by-file reference, data flow diagram)
+- [x] Download SoLEXS data from PRADAN (May 2026, 30 days)
+- [x] Download HEL1OS data from PRADAN (May 2026, 60 dumps)
+- [x] Extract SoLEXS SDD2 files to `data/raw/solexs/YYYY/MM/DD/` (script: `scripts/extract_solexs_data.py`)
+  - [x] 90 files: 30 × (.lc.gz + .pi.gz + .gti.gz), 213 MB total
+- [x] Extract HEL1OS lightcurve + GTI files to `data/raw/hel1os/YYYY/MM/DD/dump_HHMMSS/` (script: `scripts/extract_hel1os_data.py`)
+  - [x] 480 files: 60 dumps × 8 files, 2.67 GB total
+- [x] Discard unnecessary data (SDD1, spectral files, event lists, housekeeping, CalDB)
+- [x] Document FITS file internal structures in CONTEXT.md
+- [x] Configure .gitignore (exclude data/, __pycache__, etc.)
+- [x] Create data viewer script (`scripts/view_solexs_hel1os_data.py`)
+
+---
+
+## Phase 1: Exploratory Data Analysis (EDA)
+- [ ] **SoLEXS Light Curve Exploration**
+  - [ ] Plot full-month overview of daily SoLEXS light curves (all 30 days)
+  - [ ] Identify days with significant flare activity vs quiet days
+  - [ ] Characterize baseline (quiet Sun) count rates
+  - [ ] Identify and catalogue visible flare events (start, peak, end times)
+  - [ ] Assess data gaps (missing day 22, GTI coverage per day)
+- [ ] **SoLEXS Spectral (PI) Exploration**
+  - [ ] Plot spectrograms (time vs energy channel vs counts) for flare days
+  - [ ] Verify multi-band extraction (low/mid/high) produces sensible light curves
+  - [ ] Examine hardness ratio behaviour before, during, and after flares
+  - [ ] Check for spectral hardening as a precursor signal
+- [ ] **HEL1OS CdTe Exploration**
+  - [ ] Plot CdTe1 and CdTe2 light curves, compare for consistency
+  - [ ] Overlay CdTe with SoLEXS on same time axis to observe soft/hard X-ray relationship
+  - [ ] Check individual energy bands (5-20, 20-30, 30-40, 40-60 keV) during flares
+  - [ ] Verify dump-to-dump continuity (no gaps or overlaps between consecutive dumps)
+- [ ] **HEL1OS CZT Exploration**
+  - [ ] Plot CZT1 and CZT2 light curves, characterize background noise level
+  - [ ] Identify flares where CZT signal clearly rises above background
+  - [ ] Compare CZT signal with CdTe and SoLEXS for the same events
+- [ ] **Cross-Instrument Analysis**
+  - [ ] Time-align SoLEXS (Unix time) and HEL1OS (MJD) on common UTC axis
+  - [ ] Plot combined 3-panel view: SoLEXS + CdTe + CZT for selected flares
+  - [ ] Observe Neupert effect (hard X-ray peak leading soft X-ray peak)
+  - [ ] Quantify typical time offsets between soft and hard X-ray peaks
+- [ ] **Data Quality Report**
+  - [ ] Summarize data availability per day (valid hours from GTIs)
+  - [ ] Flag any anomalous days (unexpected count rates, instrument issues)
+  - [ ] Document findings in an EDA notebook or report
+
+---
+
+## Phase 2: Data Ingestion Module
+- [ ] **SoLEXS Loader**
+  - [ ] Write function to load LC file → DataFrame with `time_unix`, `counts`, `datetime`
+  - [ ] Write function to load PI file → DataFrame with `time_unix`, `counts_low`, `counts_mid`, `counts_high`, `hardness_ratio`
+  - [ ] Write function to load GTI file → DataFrame with `start`, `stop`
+  - [ ] Write function to apply GTI mask to LC/PI DataFrames
+- [ ] **HEL1OS Loader**
+  - [ ] Write function to load CdTe light curves (both detectors, all dumps for a day) → combined DataFrame
+  - [ ] Write function to load CZT light curves (both detectors, all dumps for a day) → combined DataFrame
+  - [ ] Write function to load HEL1OS GTI files
+  - [ ] Handle MJD-to-Unix time conversion
+  - [ ] Handle multi-dump merging (concatenate dumps, remove overlaps if any)
+  - [ ] Extract per-band light curves (not just full range) for feature engineering
+- [ ] **Unified Dataset Builder**
+  - [ ] Time-synchronize SoLEXS and HEL1OS onto a common 1-second UTC grid
+  - [ ] Handle missing data (NaN for gaps, forward-fill or interpolation strategy)
+  - [ ] Combine into a single unified DataFrame per day
+  - [ ] Save unified dataset to `data/processed/` (Parquet or CSV)
+- [ ] **Batch Processing Script**
+  - [ ] Process all 30 days in batch, produce unified daily files
+  - [ ] Generate a data availability summary (which days have complete data from both instruments)
+
+---
+
+## Phase 3: Data Processing & Cleaning
+- [ ] **Signal Cleaning**
+  - [ ] Apply GTI filtering to discard invalid observations
+  - [ ] Handle data gaps between GTI intervals (NaN, segmentation, or interpolation)
+  - [ ] Remove outliers / spurious spikes (cosmic ray hits, telemetry glitches)
+  - [ ] Smooth noisy signals where appropriate (configurable window)
+- [ ] **Normalization & Resampling**
+  - [ ] Normalize count rates if needed (or keep raw and normalize during feature engineering)
+  - [ ] Support resampling to different cadences (1s, 10s, 30s, 60s) for different use cases
+- [ ] **CZT Background Handling**
+  - [ ] Estimate CZT background level during quiet periods
+  - [ ] Implement background subtraction or background-aware features
+- [ ] **Data Validation**
+  - [ ] Verify time monotonicity (no backwards jumps)
+  - [ ] Verify no duplicate timestamps
+  - [ ] Cross-check SoLEXS LC total counts vs PI band sum for consistency
+  - [ ] Save clean processed dataset to `data/processed/`
+
+---
+
+## Phase 4: Feature Engineering
+- [ ] **Temporal Features (per instrument)**
+  - [ ] Rolling mean (multiple windows: 30s, 60s, 300s, 600s)
+  - [ ] Rolling variance / standard deviation
+  - [ ] First derivative (flux rate of change)
+  - [ ] Second derivative (acceleration)
+  - [ ] Flux gradient over multiple time horizons
+  - [ ] Rate of rise / rate of decay
+- [ ] **Spectral Features (SoLEXS PI-derived)**
+  - [ ] Multi-band counts (low, mid, high)
+  - [ ] Hardness ratio (high/low) and its rolling derivative
+  - [ ] Band ratios (mid/low, high/mid)
+  - [ ] Spectral slope changes
+- [ ] **Cross-Instrument Features**
+  - [ ] Soft-to-hard X-ray ratio (SoLEXS / CdTe)
+  - [ ] SoLEXS-to-CZT ratio
+  - [ ] CdTe-to-CZT ratio
+  - [ ] Temporal lag between soft and hard X-ray changes
+  - [ ] Cross-correlation features
+- [ ] **Statistical Features**
+  - [ ] Z-score relative to recent baseline
+  - [ ] Percentile rank within recent history
+  - [ ] Change-point detection features
+- [ ] **Feature Storage**
+  - [ ] Save engineered feature dataset to `data/features/`
+  - [ ] Document all features with descriptions, units, and physical meaning
+
+---
+
+## Phase 5: Flare Detection Module (Nowcasting)
+- [ ] **Threshold-Based Detection**
+  - [ ] Define adaptive threshold for flare start (e.g., N-sigma above rolling baseline)
+  - [ ] Detect flare peak (local maximum after start)
+  - [ ] Detect flare end (return to within threshold of baseline)
+  - [ ] Handle nested/overlapping flares
+- [ ] **Independent Catalogues**
+  - [ ] Generate soft X-ray flare catalogue (from SoLEXS)
+  - [ ] Generate hard X-ray flare catalogue (from HEL1OS CdTe)
+  - [ ] Generate high-energy catalogue (from HEL1OS CZT, if signal above background)
+- [ ] **Master Catalogue**
+  - [ ] Cross-match soft and hard X-ray detections
+  - [ ] Merge into unified master flare catalogue with columns: start, peak, end, duration, peak_counts, classification
+- [ ] **Evaluation**
+  - [ ] Compare detected events against known flare lists (e.g., GOES flare catalogue for the same period)
+  - [ ] Tune detection parameters
+
+---
+
+## Phase 6: Flare Classification
+- [ ] Classify detected flares by peak soft X-ray flux (A, B, C, M, X classes)
+- [ ] Map SoLEXS SDD2 count rates to GOES flux equivalents (calibration/correlation)
+- [ ] Add classification to the master flare catalogue
+- [ ] Validate classifications against GOES data if available
+
+---
+
+## Phase 7: Forecasting Module
+- [ ] **Training Data Preparation**
+  - [ ] Label time series with "flare within next N minutes" (binary label for multiple horizons)
+  - [ ] Create train/validation/test splits (chronological, no data leakage)
+  - [ ] Balance classes (flare vs non-flare periods)
+- [ ] **Model Development**
+  - [ ] Baseline model: logistic regression on engineered features
+  - [ ] Tree-based models: XGBoost / LightGBM
+  - [ ] Evaluate need for sequence models (LSTM, Transformer) — only if tree models insufficient
+  - [ ] Multi-horizon output: predict probability for 5, 15, 30, 60 minute windows
+- [ ] **Training & Evaluation**
+  - [ ] Train with strict temporal separation (no future leakage)
+  - [ ] Evaluate: precision, recall, F1, false alarm rate, lead time
+  - [ ] Feature importance analysis
+  - [ ] Save trained models to `models/`
+- [ ] **Inference Pipeline**
+  - [ ] Build streaming inference function (input: current + historical features → output: probabilities)
+  - [ ] Enforce no-future-data constraint during inference
+
+---
+
+## Phase 8: Alert Engine
+- [ ] Define alert levels: Normal, Watch, Warning, Critical
+- [ ] Map forecast probabilities to alert levels (configurable thresholds)
+- [ ] Generate alert messages with context (current readings, probability, contributing features)
+- [ ] Alert history log
+
+---
+
+## Phase 9: Explainability Module
+- [ ] Compute feature importance (from tree models or SHAP)
+- [ ] Generate human-readable prediction explanations
+  - [ ] Example: "Flare probability 82% — soft X-ray rising rapidly, hardness ratio increased 40% in 5 min"
+- [ ] Link explanations to alert engine output
+- [ ] Flare similarity search: find historical events with similar feature profiles
+
+---
+
+## Phase 10: Flare Catalogue Database
+- [ ] Design database schema (SQLite)
+- [ ] Store: timestamp, start, peak, end, classification, confidence, prediction history, explanation
+- [ ] Automatically populate from detection + classification modules
+- [ ] Query interface for historical lookup
+
+---
+
+## Phase 11: Visualization Dashboard
+- [ ] **Core Panels**
+  - [ ] Live soft X-ray monitoring graph (SoLEXS)
+  - [ ] Live hard X-ray monitoring graph (HEL1OS CdTe + CZT)
+  - [ ] Forecasting panel (probability gauges, risk level)
+  - [ ] Detection panel (active flare status, current classification)
+  - [ ] Alert panel (generated warnings with timestamps)
+- [ ] **Playback System**
+  - [ ] Timer-based dataset playback (simulate real-time data arrival)
+  - [ ] Configurable playback speed
+  - [ ] Strict no-future-data enforcement during playback
+  - [ ] Progress bar showing position in dataset
+- [ ] **Historical Views**
+  - [ ] Searchable flare catalogue table
+  - [ ] Event replay (jump to a historical flare and watch model behaviour)
+  - [ ] Prediction timeline (how forecast confidence evolved before each event)
+- [ ] **Analytics**
+  - [ ] Performance metrics panel (TPR, FAR, precision, recall, F1)
+  - [ ] Feature importance visualization
+  - [ ] Flare similarity search UI
+- [ ] **Technical**
+  - [ ] Streamlit app structure
+  - [ ] Responsive layout
+  - [ ] Deploy / run instructions
+
+---
+
+## Current Status
+
+**Last updated:** 2026-06-24
+
+| Phase | Status | Notes |
+|---|---|---|
+| Phase 0: Setup & Data | ✅ Complete | All raw data in place, 30 days SoLEXS + 60 dumps HEL1OS |
+| Phase 1: EDA | ⬜ Not started | Viewer script ready, need systematic exploration |
+| Phase 2: Data Ingestion | ⬜ Not started | — |
+| Phase 3: Data Processing | ⬜ Not started | — |
+| Phase 4: Feature Engineering | ⬜ Not started | — |
+| Phase 5: Flare Detection | ⬜ Not started | — |
+| Phase 6: Classification | ⬜ Not started | — |
+| Phase 7: Forecasting | ⬜ Not started | — |
+| Phase 8: Alert Engine | ⬜ Not started | — |
+| Phase 9: Explainability | ⬜ Not started | — |
+| Phase 10: Catalogue DB | ⬜ Not started | — |
+| Phase 11: Dashboard | ⬜ Not started | — |
+
+**Next step:** Phase 1 (EDA) — systematically explore the data to build visual intuition before writing pipeline code.
