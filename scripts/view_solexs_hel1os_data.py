@@ -143,7 +143,13 @@ def read_hel1os_lightcurves(date_str, detector_type):
     """Read HEL1OS light curve files for a given date and detector type.
 
     detector_type: 'cdte' or 'czt'
-    Returns combined (averaged) light curve from both detectors.
+
+    HEL1OS light curve FITS files contain multiple extensions, one per energy band:
+      CdTe: 5-20, 20-30, 30-40, 40-60, 1.8-90 keV (full range)
+      CZT:  20-40, 40-60, 60-80, 80-150, 18-160 keV (full range)
+
+    Each extension has columns: MJD, ISOT, CTR, STAT_ERR
+    We read the FULL RANGE band (last extension) for total count rate.
     """
     year, month, day = parse_date(date_str)
     day_dir = HEL1OS_DIR / year / month / day
@@ -163,70 +169,29 @@ def read_hel1os_lightcurves(date_str, detector_type):
                 continue
 
             with fits.open(lc_file) as hdul:
-                # Try to find the data extension
-                ext = hdul[1]
-                col_names = [c.name.upper() for c in ext.columns]
-                data = ext.data
+                # The last extension is the full energy range band
+                full_range_ext = hdul[-1]
+                data = full_range_ext.data
 
-                # Get time column
-                time_col = None
-                for candidate in ["TIME", "MJD"]:
-                    if candidate in col_names:
-                        time_col = candidate
-                        break
+                mjd = data["MJD"]
+                ctr = data["CTR"]
+                stat_err = data["STAT_ERR"]
 
-                if time_col is None:
-                    print(f"    WARNING: No TIME column in {lc_file.name}")
-                    continue
-
-                times = data[time_col]
-
-                # Get count rate column
-                rate_col = None
-                for candidate in ["COUNT_RATE", "RATE", "COUNTS"]:
-                    if candidate in col_names:
-                        rate_col = candidate
-                        break
-
-                if rate_col is None:
-                    print(f"    WARNING: No count rate column in {lc_file.name}")
-                    print(f"    Available columns: {col_names}")
-                    continue
-
-                rates = data[rate_col]
-
-                # Get error column if available
-                err_col = None
-                for candidate in ["STAT_ERR", "ERROR", "ERR"]:
-                    if candidate in col_names:
-                        err_col = candidate
-                        break
-
-                # Handle multi-band light curves (HEL1OS has energy bands)
-                # rates might be 2D: (N_times, N_bands)
-                if rates.ndim == 2:
-                    # Sum across all energy bands for total count rate
-                    total_rate = np.sum(rates, axis=1)
-                else:
-                    total_rate = rates
-
-                # Determine time format
-                # If values are small (< 100000), likely MJD
-                # If values are large (> 1e9), likely Unix time
-                if np.median(times) < 100000:
-                    # MJD - convert to Unix
-                    # Unix = (MJD - 40587) * 86400
-                    time_unix = (times - 40587.0) * 86400.0
-                else:
-                    time_unix = times
+                # Convert MJD to Unix time: Unix = (MJD - 40587) * 86400
+                time_unix = (mjd - 40587.0) * 86400.0
 
                 df = pd.DataFrame({
                     "time_unix": time_unix,
-                    "count_rate": total_rate.astype(float),
+                    "count_rate": ctr.astype(float),
+                    "stat_err": stat_err.astype(float),
                     "detector": f"{detector_type}{det_num}",
                     "dump": dump_dir.name,
                 })
                 all_dfs.append(df)
+
+                band_name = full_range_ext.name
+                print(f"    {dump_dir.name}/{lc_file.name}: "
+                      f"{len(df)} rows, band={band_name}")
 
     if not all_dfs:
         print(f"  HEL1OS {detector_type}: No data found")
@@ -238,9 +203,10 @@ def read_hel1os_lightcurves(date_str, detector_type):
 
     n_dumps = len(dump_dirs)
     det_counts = combined["detector"].nunique()
-    print(f"  HEL1OS {detector_type}: {len(combined)} rows from "
+    print(f"  HEL1OS {detector_type}: {len(combined)} total rows from "
           f"{n_dumps} dump(s), {det_counts} detector(s)")
     return combined
+
 
 
 def read_hel1os_gti(date_str, detector_type):
