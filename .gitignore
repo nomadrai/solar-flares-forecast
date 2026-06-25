@@ -8,3 +8,6 @@ __pycache__/
 *.pyc
 *.pyo
 .venv/
+
+# Generated outputs
+outputs/

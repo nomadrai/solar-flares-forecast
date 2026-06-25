@@ -24,35 +24,35 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 ---
 
 ## Phase 1: Exploratory Data Analysis (EDA)
-- [ ] **SoLEXS Light Curve Exploration**
-  - [ ] Plot full-month overview of daily SoLEXS light curves (all 30 days)
-  - [ ] Identify days with significant flare activity vs quiet days
-  - [ ] Characterize baseline (quiet Sun) count rates
-  - [ ] Identify and catalogue visible flare events (start, peak, end times)
-  - [ ] Assess data gaps (missing day 22, GTI coverage per day)
-- [ ] **SoLEXS Spectral (PI) Exploration**
-  - [ ] Plot spectrograms (time vs energy channel vs counts) for flare days
-  - [ ] Verify multi-band extraction (low/mid/high) produces sensible light curves
-  - [ ] Examine hardness ratio behaviour before, during, and after flares
-  - [ ] Check for spectral hardening as a precursor signal
-- [ ] **HEL1OS CdTe Exploration**
-  - [ ] Plot CdTe1 and CdTe2 light curves, compare for consistency
-  - [ ] Overlay CdTe with SoLEXS on same time axis to observe soft/hard X-ray relationship
-  - [ ] Check individual energy bands (5-20, 20-30, 30-40, 40-60 keV) during flares
-  - [ ] Verify dump-to-dump continuity (no gaps or overlaps between consecutive dumps)
-- [ ] **HEL1OS CZT Exploration**
-  - [ ] Plot CZT1 and CZT2 light curves, characterize background noise level
-  - [ ] Identify flares where CZT signal clearly rises above background
-  - [ ] Compare CZT signal with CdTe and SoLEXS for the same events
-- [ ] **Cross-Instrument Analysis**
-  - [ ] Time-align SoLEXS (Unix time) and HEL1OS (MJD) on common UTC axis
-  - [ ] Plot combined 3-panel view: SoLEXS + CdTe + CZT for selected flares
-  - [ ] Observe Neupert effect (hard X-ray peak leading soft X-ray peak)
-  - [ ] Quantify typical time offsets between soft and hard X-ray peaks
-- [ ] **Data Quality Report**
-  - [ ] Summarize data availability per day (valid hours from GTIs)
-  - [ ] Flag any anomalous days (unexpected count rates, instrument issues)
-  - [ ] Document findings in an EDA notebook or report
+- [x] **SoLEXS Light Curve Exploration**
+  - [x] Plot full-month overview of daily SoLEXS light curves (all 30 days)
+  - [x] Identify days with significant flare activity vs quiet days
+  - [x] Characterize baseline (quiet Sun) count rates
+  - [x] Identify and catalogue visible flare events (start, peak, end times)
+  - [x] Assess data gaps (missing day 22, GTI coverage per day)
+- [x] **SoLEXS Spectral (PI) Exploration**
+  - [x] Plot spectrograms (time vs energy channel vs counts) for flare days
+  - [x] Verify multi-band extraction (low/mid/high) produces sensible light curves
+  - [x] Examine hardness ratio behaviour before, during, and after flares
+  - [x] Check for spectral hardening as a precursor signal
+- [x] **HEL1OS CdTe Exploration**
+  - [x] Plot CdTe1 and CdTe2 light curves, compare for consistency
+  - [x] Overlay CdTe with SoLEXS on same time axis to observe soft/hard X-ray relationship
+  - [x] Check individual energy bands (5-20, 20-30, 30-40, 40-60 keV) during flares
+  - [x] Verify dump-to-dump continuity (no gaps or overlaps between consecutive dumps)
+- [x] **HEL1OS CZT Exploration**
+  - [x] Plot CZT1 and CZT2 light curves, characterize background noise level
+  - [x] Identify flares where CZT signal clearly rises above background
+  - [x] Compare CZT signal with CdTe and SoLEXS for the same events
+- [x] **Cross-Instrument Analysis**
+  - [x] Time-align SoLEXS (Unix time) and HEL1OS (MJD) on common UTC axis
+  - [x] Plot combined 3-panel view: SoLEXS + CdTe + CZT for selected flares
+  - [x] Observe Neupert effect (hard X-ray peak leading soft X-ray peak)
+  - [x] Quantify typical time offsets between soft and hard X-ray peaks
+- [x] **Data Quality Report**
+  - [x] Summarize data availability per day (valid hours from GTIs)
+  - [x] Flag any anomalous days (unexpected count rates, instrument issues)
+  - [x] Document findings in an EDA notebook or report
 
 ---
 
