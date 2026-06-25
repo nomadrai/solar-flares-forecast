@@ -76,22 +76,21 @@ Because the raw FITS files and generated model outputs are very large, they are 
 We have included `gdown` in the requirements to make downloading easy.
 
 **Important Note on What to Download:**
-- **If you are only working on the Frontend / Dashboard:** You **DO NOT** need to download the massive `data/` folder. You only need to download `outputs.zip` (which contains the pre-trained models and catalogues) so the UI has something to display.
-- **If you are working on Data Processing, Feature Engineering, or ML Training:** You **MUST** download the `data.zip` folder. The TEJAS pipeline parses these raw `.lc.gz` and `.fits` files directly to build the unified datasets. Without it, you cannot run any of the processing or training scripts.
+- **If you are only working on the Frontend / Dashboard:** You **DO NOT** need to download the massive `data/` folder. You only need to download `outputs/` (which contains the pre-trained models and catalogues) so the UI has something to display.
+- **If you are working on Data Processing, Feature Engineering, or ML Training:** You **MUST** download the `data/` folder. The TEJAS pipeline parses these raw `.lc.gz` and `.fits` files directly to build the unified datasets. Without it, you cannot run any of the processing or training scripts.
 
 **To get the required directories:**
-1. The project maintainer will provide a shared Google Drive Folder Link or File IDs containing the `data.zip` and `outputs.zip` archives.
+1. The project maintainer will provide a shared Google Drive Folder Link or File IDs containing the `data/` and `outputs/` folder.
 2. You can download them manually and extract them into the root of this project, or use `gdown` from the terminal (once the `venv` is active):
 
 ```bash
-# Example commands (Replace <FILE_ID> with the actual Google Drive IDs provided by the maintainer)
-gdown <OUTPUTS_ZIP_FILE_ID>
+# Run this for downloading the outputs/ folder
+gdown --folder 1F6k36Tu1Ws6FLzkYbVTgt_N0Tdi9bXbg
 
 # ONLY run this if you are doing ML/Data Science work!
 gdown <DATA_ZIP_FILE_ID>
 
-# Unzip the files (on Windows you can extract manually, or use terminal tools if available)
-# The extracted folders should merge with your local project structure
+# These commands will download the required data folders in your workspace
 ```
 
 **Expected Directory Structure after extraction:**
