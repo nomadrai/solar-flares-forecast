@@ -88,7 +88,7 @@ We have included `gdown` in the requirements to make downloading easy.
 gdown --folder 1F6k36Tu1Ws6FLzkYbVTgt_N0Tdi9bXbg
 
 # ONLY run this if you are doing ML/Data Science work!
-gdown <DATA_ZIP_FILE_ID>
+gdown --folder 1RNQfZRFI5C-0ZmhETwfW_az8UXxxumi9
 
 # These commands will download the required data folders in your workspace
 ```
