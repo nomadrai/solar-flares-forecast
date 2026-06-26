@@ -1,6 +1,6 @@
 # TEJAS: Temporal Evaluation and Joint Analysis of Solar-flares
 
-Welcome to **TEJAS**, an AI-powered solar flare nowcasting and forecasting platform built using combined SoLEXS and HEL1OS X-ray observations from the Aditya-L1 mission. 
+Welcome to **TEJAS**, an AI-powered solar-flare nowcasting and forecasting platform built using combined SoLEXS and HEL1OS X-ray observations from the Aditya-L1 mission. 
 
 This README provides a complete guide for setting up the environment, getting the required data, and contributing to the project.
 
