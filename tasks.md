@@ -231,12 +231,12 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 
 ## Current Status
 
-**Last updated:** 2026-06-24
+**Last updated:** 2026-07-02
 
 | Phase | Status | Notes |
 |---|---|---|
 | Phase 0: Setup & Data | ✅ Complete | All raw data in place, 30 days SoLEXS + 60 dumps HEL1OS |
-| Phase 1: EDA | ⬜ Not started | Viewer script ready, need systematic exploration |
+| Phase 1: EDA | ✅ Complete | 23 flare-day plots, data quality report, preliminary flare catalogue, GTI/noise/availability CSVs |
 | Phase 2: Data Ingestion | ⬜ Not started | — |
 | Phase 3: Data Processing | ⬜ Not started | — |
 | Phase 4: Feature Engineering | ⬜ Not started | — |
@@ -248,4 +248,4 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 | Phase 10: Catalogue DB | ⬜ Not started | — |
 | Phase 11: Dashboard | ⬜ Not started | — |
 
-**Next step:** Phase 1 (EDA) — systematically explore the data to build visual intuition before writing pipeline code.
+**Next step:** Phase 2 (Data Ingestion Module) — build production-grade loaders, apply EDA recommendations, produce unified daily datasets.
