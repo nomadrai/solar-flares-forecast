@@ -57,46 +57,46 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 ---
 
 ## Phase 2: Data Ingestion Module
-- [ ] **SoLEXS Loader**
-  - [ ] Write function to load LC file → DataFrame with `time_unix`, `counts`, `datetime`
-  - [ ] Write function to load PI file → DataFrame with `time_unix`, `counts_low`, `counts_mid`, `counts_high`, `hardness_ratio`
-  - [ ] Write function to load GTI file → DataFrame with `start`, `stop`
-  - [ ] Write function to apply GTI mask to LC/PI DataFrames
-- [ ] **HEL1OS Loader**
-  - [ ] Write function to load CdTe light curves (both detectors, all dumps for a day) → combined DataFrame
-  - [ ] Write function to load CZT light curves (both detectors, all dumps for a day) → combined DataFrame
-  - [ ] Write function to load HEL1OS GTI files
-  - [ ] Handle MJD-to-Unix time conversion
-  - [ ] Handle multi-dump merging (concatenate dumps, remove overlaps if any)
-  - [ ] Extract per-band light curves (not just full range) for feature engineering
-- [ ] **Unified Dataset Builder**
-  - [ ] Time-synchronize SoLEXS and HEL1OS onto a common 1-second UTC grid
-  - [ ] Handle missing data (NaN for gaps, forward-fill or interpolation strategy)
-  - [ ] Combine into a single unified DataFrame per day
-  - [ ] Save unified dataset to `data/processed/` (Parquet or CSV)
-- [ ] **Batch Processing Script**
-  - [ ] Process all 30 days in batch, produce unified daily files
-  - [ ] Generate a data availability summary (which days have complete data from both instruments)
+- [x] **SoLEXS Loader**
+  - [x] Write function to load LC file → DataFrame with `time_unix`, `counts`, `datetime`
+  - [x] Write function to load PI file → DataFrame with `time_unix`, `counts_low`, `counts_mid`, `counts_high`, `hardness_ratio`
+  - [x] Write function to load GTI file → DataFrame with `start`, `stop`
+  - [x] Write function to apply GTI mask to LC/PI DataFrames
+- [x] **HEL1OS Loader**
+  - [x] Write function to load CdTe light curves (both detectors, all dumps for a day) → combined DataFrame
+  - [x] Write function to load CZT light curves (both detectors, all dumps for a day) → combined DataFrame
+  - [x] Write function to load HEL1OS GTI files
+  - [x] Handle MJD-to-Unix time conversion
+  - [x] Handle multi-dump merging (concatenate dumps, remove overlaps if any)
+  - [x] Extract per-band light curves (not just full range) for feature engineering
+- [x] **Unified Dataset Builder**
+  - [x] Time-synchronize SoLEXS and HEL1OS onto a common 1-second UTC grid
+  - [x] Handle missing data (NaN for gaps, forward-fill or interpolation strategy)
+  - [x] Combine into a single unified DataFrame per day
+  - [x] Save unified dataset to `data/processed/` (Parquet or CSV)
+- [x] **Batch Processing Script**
+  - [x] Process all 30 days in batch, produce unified daily files
+  - [x] Generate a data availability summary (which days have complete data from both instruments)
 
 ---
 
 ## Phase 3: Data Processing & Cleaning
 - [ ] **Signal Cleaning**
-  - [ ] Apply GTI filtering to discard invalid observations
-  - [ ] Handle data gaps between GTI intervals (NaN, segmentation, or interpolation)
+  - [x] Apply GTI filtering to discard invalid observations
+  - [x] Handle data gaps between GTI intervals (NaN, segmentation, or interpolation)
   - [ ] Remove outliers / spurious spikes (cosmic ray hits, telemetry glitches)
   - [ ] Smooth noisy signals where appropriate (configurable window)
 - [ ] **Normalization & Resampling**
   - [ ] Normalize count rates if needed (or keep raw and normalize during feature engineering)
-  - [ ] Support resampling to different cadences (1s, 10s, 30s, 60s) for different use cases
+  - [x] Support resampling to different cadences (1s, 10s, 30s, 60s) for different use cases
 - [ ] **CZT Background Handling**
   - [ ] Estimate CZT background level during quiet periods
   - [ ] Implement background subtraction or background-aware features
-- [ ] **Data Validation**
-  - [ ] Verify time monotonicity (no backwards jumps)
-  - [ ] Verify no duplicate timestamps
-  - [ ] Cross-check SoLEXS LC total counts vs PI band sum for consistency
-  - [ ] Save clean processed dataset to `data/processed/`
+- [x] **Data Validation**
+  - [x] Verify time monotonicity (no backwards jumps)
+  - [x] Verify no duplicate timestamps
+  - [x] Cross-check SoLEXS LC total counts vs PI band sum for consistency
+  - [x] Save clean processed dataset to `data/processed/`
 
 ---
 
@@ -237,8 +237,8 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 |---|---|---|
 | Phase 0: Setup & Data | ✅ Complete | All raw data in place, 30 days SoLEXS + 60 dumps HEL1OS |
 | Phase 1: EDA | ✅ Complete | 23 flare-day plots, data quality report, preliminary flare catalogue, GTI/noise/availability CSVs |
-| Phase 2: Data Ingestion | ⬜ Not started | — |
-| Phase 3: Data Processing | ⬜ Not started | — |
+| Phase 2: Data Ingestion | ✅ Complete | 30/30 days ingested, 60/60 tests passing, unified Parquet files in data/processed/unified/ |
+| Phase 3: Data Processing | 🟡 Partial | GTI filtering, gap handling, resampling, validation done in Phase 2; remaining: outlier removal, smoothing, CZT background, normalization |
 | Phase 4: Feature Engineering | ⬜ Not started | — |
 | Phase 5: Flare Detection | ⬜ Not started | — |
 | Phase 6: Classification | ⬜ Not started | — |
@@ -248,4 +248,4 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 | Phase 10: Catalogue DB | ⬜ Not started | — |
 | Phase 11: Dashboard | ⬜ Not started | — |
 
-**Next step:** Phase 2 (Data Ingestion Module) — build production-grade loaders, apply EDA recommendations, produce unified daily datasets.
+**Next step:** Phase 3 (Data Processing) — remaining: outlier/spike removal, signal smoothing, CZT background estimation & subtraction, normalization.

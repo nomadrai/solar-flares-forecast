@@ -2,6 +2,7 @@
 pandas
 numpy
 astropy
+pyarrow  # Parquet I/O for unified dataset
 
 # Machine Learning
 scikit-learn
@@ -13,5 +14,9 @@ torch  # PyTorch
 plotly
 streamlit
 
+# Testing
+pytest
+
 # Cloud storage download utility
 gdown
+
