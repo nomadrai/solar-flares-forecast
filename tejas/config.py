@@ -11,7 +11,7 @@ from pathlib import Path
 
 # ── Project Paths ────────────────────────────────────────────────────────────
 
-PROJECT_DIR = Path(r"D:\SOLAR FLARE FORECAST\solar-flares-forecast")
+PROJECT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_DIR / "data"
 
 # Raw FITS data (read-only)
