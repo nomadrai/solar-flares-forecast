@@ -11,7 +11,7 @@ from pathlib import Path
 
 # ── Project Paths ────────────────────────────────────────────────────────────
 
-PROJECT_DIR = Path(r"C:\Users\aadit\Documents\Projects\TEJAS")
+PROJECT_DIR = Path(r"D:\SOLAR FLARE FORECAST\solar-flares-forecast")
 DATA_DIR = PROJECT_DIR / "data"
 
 # Raw FITS data (read-only)
@@ -96,3 +96,41 @@ GAP_MEDIUM_S = 120     # 30-120s: NaN insertion (configurable)
 # variance-stabilising Poisson data. Applied via np.maximum(counts, eps)
 # before any division or log operation.
 ZERO_COUNT_EPS = 0.5
+
+
+# ── Phase 3: Processing & Cleaning ──────────────────────────────────────────
+
+# Output directory for clean processed data (separate from Phase 2 unified)
+CLEAN_DIR = PROCESSED_DIR / "clean"
+
+# Spike removal parameters (per instrument).
+# window:          rolling-median window in seconds (must be odd)
+# n_sigma:         MAD-based threshold multiplier for spike candidates
+# min_consecutive: minimum consecutive flagged bins to be considered a REAL
+#                  signal (flare) rather than a spike.  Isolated runs shorter
+#                  than this are replaced.
+SPIKE_REMOVAL = {
+    "solexs": {"window": 61, "n_sigma": 7, "min_consecutive": 3},
+    "cdte":   {"window": 61, "n_sigma": 5, "min_consecutive": 3},
+    "czt":    {"window": 61, "n_sigma": 5, "min_consecutive": 3},
+}
+
+# Smoothing windows (seconds, must be odd).
+# Wider windows reduce noise but blur fast transients.
+SMOOTHING_WINDOWS = {
+    # SoLEXS channels
+    "solexs_counts":          5,
+    "solexs_counts_low":      5,
+    "solexs_counts_mid":      5,
+    "solexs_counts_high":     5,
+    "solexs_hardness_ratio": 11,   # wider: ratios amplify noise
+    # HEL1OS channels
+    "cdte_count_rate":        5,
+    "czt_count_rate":        11,   # wider: noisier CZT data
+}
+
+# CZT background estimation
+CZT_BG_QUIET_THRESHOLD = 18.0   # SoLEXS c/s; above → Sun is "active"
+CZT_BG_WINDOW_S = 3600          # 1-hour sliding window for background est.
+CZT_BG_PERCENTILE = 25          # percentile of quiet-period CZT rates
+CZT_BG_SIGNIFICANCE = 3.0       # n × background noise → "above background"

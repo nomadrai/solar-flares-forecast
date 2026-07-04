@@ -81,17 +81,17 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 ---
 
 ## Phase 3: Data Processing & Cleaning
-- [ ] **Signal Cleaning**
+- [x] **Signal Cleaning**
   - [x] Apply GTI filtering to discard invalid observations
   - [x] Handle data gaps between GTI intervals (NaN, segmentation, or interpolation)
-  - [ ] Remove outliers / spurious spikes (cosmic ray hits, telemetry glitches)
-  - [ ] Smooth noisy signals where appropriate (configurable window)
-- [ ] **Normalization & Resampling**
-  - [ ] Normalize count rates if needed (or keep raw and normalize during feature engineering)
+  - [x] Remove outliers / spurious spikes (cosmic ray hits, telemetry glitches)
+  - [x] Smooth noisy signals where appropriate (configurable window)
+- [x] **Normalization & Resampling**
+  - [x] Normalize count rates if needed (or keep raw and normalize during feature engineering)
   - [x] Support resampling to different cadences (1s, 10s, 30s, 60s) for different use cases
-- [ ] **CZT Background Handling**
-  - [ ] Estimate CZT background level during quiet periods
-  - [ ] Implement background subtraction or background-aware features
+- [x] **CZT Background Handling**
+  - [x] Estimate CZT background level during quiet periods
+  - [x] Implement background subtraction or background-aware features
 - [x] **Data Validation**
   - [x] Verify time monotonicity (no backwards jumps)
   - [x] Verify no duplicate timestamps
@@ -231,14 +231,14 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 
 ## Current Status
 
-**Last updated:** 2026-07-02
+**Last updated:** 2026-07-04
 
 | Phase | Status | Notes |
 |---|---|---|
 | Phase 0: Setup & Data | ✅ Complete | All raw data in place, 30 days SoLEXS + 60 dumps HEL1OS |
 | Phase 1: EDA | ✅ Complete | 23 flare-day plots, data quality report, preliminary flare catalogue, GTI/noise/availability CSVs |
 | Phase 2: Data Ingestion | ✅ Complete | 30/30 days ingested, 60/60 tests passing, unified Parquet files in data/processed/unified/ |
-| Phase 3: Data Processing | 🟡 Partial | GTI filtering, gap handling, resampling, validation done in Phase 2; remaining: outlier removal, smoothing, CZT background, normalization |
+| Phase 3: Data Processing | ✅ Complete | 30/30 days processed, 23/23 tests passing, clean Parquet files in data/processed/clean/. Spike removal (62 spikes across 30 days), rolling-median smoothing, CZT background subtraction (avg ~17 c/s), log1p + percentile normalization. |
 | Phase 4: Feature Engineering | ⬜ Not started | — |
 | Phase 5: Flare Detection | ⬜ Not started | — |
 | Phase 6: Classification | ⬜ Not started | — |
@@ -248,4 +248,5 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 | Phase 10: Catalogue DB | ⬜ Not started | — |
 | Phase 11: Dashboard | ⬜ Not started | — |
 
-**Next step:** Phase 3 (Data Processing) — remaining: outlier/spike removal, signal smoothing, CZT background estimation & subtraction, normalization.
+**Next step:** Phase 4 (Feature Engineering) — temporal features, spectral features, cross-instrument features, statistical features.
+
