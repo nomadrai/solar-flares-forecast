@@ -101,31 +101,31 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 ---
 
 ## Phase 4: Feature Engineering
-- [ ] **Temporal Features (per instrument)**
-  - [ ] Rolling mean (multiple windows: 30s, 60s, 300s, 600s)
-  - [ ] Rolling variance / standard deviation
-  - [ ] First derivative (flux rate of change)
-  - [ ] Second derivative (acceleration)
-  - [ ] Flux gradient over multiple time horizons
-  - [ ] Rate of rise / rate of decay
-- [ ] **Spectral Features (SoLEXS PI-derived)**
-  - [ ] Multi-band counts (low, mid, high)
-  - [ ] Hardness ratio (high/low) and its rolling derivative
-  - [ ] Band ratios (mid/low, high/mid)
-  - [ ] Spectral slope changes
-- [ ] **Cross-Instrument Features**
-  - [ ] Soft-to-hard X-ray ratio (SoLEXS / CdTe)
-  - [ ] SoLEXS-to-CZT ratio
-  - [ ] CdTe-to-CZT ratio
-  - [ ] Temporal lag between soft and hard X-ray changes
-  - [ ] Cross-correlation features
-- [ ] **Statistical Features**
-  - [ ] Z-score relative to recent baseline
-  - [ ] Percentile rank within recent history
-  - [ ] Change-point detection features
-- [ ] **Feature Storage**
-  - [ ] Save engineered feature dataset to `data/features/`
-  - [ ] Document all features with descriptions, units, and physical meaning
+- [x] **Temporal Features (per instrument)**
+  - [x] Rolling mean (multiple windows: 30s, 60s, 300s, 600s)
+  - [x] Rolling variance / standard deviation
+  - [x] First derivative (flux rate of change)
+  - [x] Second derivative (acceleration)
+  - [x] Flux gradient over multiple time horizons
+  - [x] Rate of rise / rate of decay
+- [x] **Spectral Features (SoLEXS PI-derived)**
+  - [x] Multi-band counts (low, mid, high)
+  - [x] Hardness ratio (high/low) and its rolling derivative
+  - [x] Band ratios (mid/low, high/mid)
+  - [x] Spectral slope changes
+- [x] **Cross-Instrument Features**
+  - [x] Soft-to-hard X-ray ratio (SoLEXS / CdTe)
+  - [x] SoLEXS-to-CZT ratio
+  - [x] CdTe-to-CZT ratio
+  - [x] Temporal lag between soft and hard X-ray changes
+  - [x] Cross-correlation features
+- [x] **Statistical Features**
+  - [x] Z-score relative to recent baseline
+  - [x] Percentile rank within recent history
+  - [x] Change-point detection features (CUSUM)
+- [x] **Feature Storage**
+  - [x] Save engineered feature dataset to `data/features/`
+  - [x] Document all features with descriptions, units, and physical meaning (`feature_catalog.md`)
 
 ---
 
@@ -231,7 +231,7 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 
 ## Current Status
 
-**Last updated:** 2026-07-04
+**Last updated:** 2026-07-09
 
 | Phase | Status | Notes |
 |---|---|---|
@@ -239,7 +239,7 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 | Phase 1: EDA | ✅ Complete | 23 flare-day plots, data quality report, preliminary flare catalogue, GTI/noise/availability CSVs |
 | Phase 2: Data Ingestion | ✅ Complete | 30/30 days ingested, 60/60 tests passing, unified Parquet files in data/processed/unified/ |
 | Phase 3: Data Processing | ✅ Complete | 30/30 days processed, 23/23 tests passing, clean Parquet files in data/processed/clean/. Spike removal (62 spikes across 30 days), rolling-median smoothing, CZT background subtraction (avg ~17 c/s), log1p + percentile normalization. |
-| Phase 4: Feature Engineering | ⬜ Not started | — |
+| Phase 4: Feature Engineering | ✅ Complete | 30/30 days processed, 115/115 tests passing (32 new + 83 existing). 81 features added per day (45 temporal + 13 spectral + 8 cross-instrument + 15 statistical), 121 total columns. Feature Parquet files in data/features/. Avg 5.1s/day, 153s total. |
 | Phase 5: Flare Detection | ⬜ Not started | — |
 | Phase 6: Classification | ⬜ Not started | — |
 | Phase 7: Forecasting | ⬜ Not started | — |
@@ -248,5 +248,5 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 | Phase 10: Catalogue DB | ⬜ Not started | — |
 | Phase 11: Dashboard | ⬜ Not started | — |
 
-**Next step:** Phase 4 (Feature Engineering) — temporal features, spectral features, cross-instrument features, statistical features.
+**Next step:** Phase 5 (Flare Detection Module) — threshold-based detection, independent soft/hard catalogues, master catalogue, evaluation.
 

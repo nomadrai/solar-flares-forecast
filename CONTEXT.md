@@ -27,6 +27,9 @@ Clean and align observations by handling missing values, reducing noise, resampl
 ### 4. Feature Engineering Module
 Generate physically meaningful features (e.g., rolling averages, flux gradients, soft-to-hard X-ray ratios, energy trends) instead of relying purely on raw values.
 
+> **Reference:** `feature_catalog.md` is the complete reference for all 81 engineered features — names, formulas, units, and physical meaning.
+
+
 ### 5. Flare Detection Module (Nowcasting)
 Detect flare states (start, peak, end, active state) independently in both soft and hard X-rays, combining them to generate a master real-time flare catalogue.
 

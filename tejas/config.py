@@ -134,3 +134,33 @@ CZT_BG_QUIET_THRESHOLD = 18.0   # SoLEXS c/s; above → Sun is "active"
 CZT_BG_WINDOW_S = 3600          # 1-hour sliding window for background est.
 CZT_BG_PERCENTILE = 25          # percentile of quiet-period CZT rates
 CZT_BG_SIGNIFICANCE = 3.0       # n × background noise → "above background"
+
+
+# ── Phase 4: Feature Engineering ─────────────────────────────────────────
+
+# Output directory for engineered features
+FEATURES_DIR = DATA_DIR / "features"
+
+# Rolling window sizes (seconds) for temporal features.
+# All windows are strictly trailing (causal) — no future data leakage.
+FEATURE_ROLLING_WINDOWS = [30, 60, 300, 600]
+
+# Gradient horizons (seconds) for flux gradient computation.
+FEATURE_GRADIENT_HORIZONS = [30, 60, 300]
+
+# Cross-correlation parameters (SoLEXS ↔ CdTe Neupert-effect detection)
+XCORR_WINDOW_S = 300        # Trailing window for cross-correlation (seconds)
+XCORR_MAX_LAG_S = 120       # Maximum lag to search (± seconds)
+XCORR_COMPUTE_EVERY_S = 60  # Compute cross-corr every N seconds (forward-fill)
+
+# Z-score and percentile rank windows for statistical features (seconds)
+STAT_ZSCORE_WINDOWS = [300, 600]
+STAT_PCTRANK_WINDOWS = [300, 600]
+
+# CUSUM (Cumulative Sum) reset interval (seconds).
+# Prevents unbounded accumulation during long quiet periods.
+CUSUM_RESET_INTERVAL_S = 1800
+
+# Z-score denominator floor.  Prevents divide-by-zero when trailing
+# std is near zero (very stable quiet periods).
+ZSCORE_STD_FLOOR = 0.1
