@@ -16,35 +16,54 @@ All files are in **FITS (Flexible Image Transport System)** format, readable in 
 
 ```
 data/
-└── raw/
-    ├── solexs/
-    │   └── 2026/
-    │       └── 05/
-    │           ├── 01/
-    │           │   ├── AL1_SOLEXS_20260501_SDD2_L1.lc.gz
-    │           │   ├── AL1_SOLEXS_20260501_SDD2_L1.pi.gz
-    │           │   └── AL1_SOLEXS_20260501_SDD2_L1.gti.gz
-    │           ├── 02/
-    │           │   └── ...
-    │           └── 31/
-    └── hel1os/
-        └── 2026/
-            └── 05/
-                ├── 01/
-                │   ├── lightcurve_cdte1.fits
-                │   ├── lightcurve_cdte2.fits
-                │   ├── lightcurve_czt1.fits
-                │   ├── lightcurve_czt2.fits
-                │   ├── gticdte1.fits
-                │   ├── gticdte2.fits
-                │   ├── gticzt1.fits
-                │   └── gticzt2.fits
-                ├── 02/
-                │   └── ...
-                └── 31/
+├── raw/
+│   ├── solexs/
+│   │   └── 2026/
+│   │       └── 05/
+│   │           ├── 01/
+│   │           │   ├── AL1_SOLEXS_20260501_SDD2_L1.lc.gz
+│   │           │   ├── AL1_SOLEXS_20260501_SDD2_L1.pi.gz
+│   │           │   └── AL1_SOLEXS_20260501_SDD2_L1.gti.gz
+│   │           ├── 02/
+│   │           │   └── ...
+│   │           └── 31/
+│   └── hel1os/
+│       └── 2026/
+│           └── 05/
+│               ├── 01/
+│               │   ├── lightcurve_cdte1.fits
+│               │   ├── lightcurve_cdte2.fits
+│               │   ├── lightcurve_czt1.fits
+│               │   ├── lightcurve_czt2.fits
+│               │   ├── gticdte1.fits
+│               │   ├── gticdte2.fits
+│               │   ├── gticzt1.fits
+│               │   └── gticzt2.fits
+│               ├── 02/
+│               │   └── ...
+│               └── 31/
+├── processed/
+│   ├── unified/                          ← Phase 2 output
+│   │   └── 2026/
+│   │       └── 05/
+│   │           ├── 2026-05-01.parquet
+│   │           ├── ...
+│   │           └── ingestion_summary.csv
+│   └── clean/                            ← Phase 3 output
+│       └── 2026/
+│           └── 05/
+│               ├── 2026-05-01.parquet
+│               ├── ...
+│               └── processing_summary.csv
+└── features/                             ← Phase 4 output
+    └── 2026/
+        └── 05/
+            ├── 2026-05-01.parquet
+            ├── ...
+            └── feature_summary.csv
 ```
 
-The structure is **instrument-first, then chronological** (`year/month/day`). This matches the processing pipeline: each instrument has its own loader, and the outputs are merged downstream. It also scales cleanly when new months, years, or instruments are added.
+All directories follow **type-first, then chronological** (`type/year/month/`). Raw data additionally nests by day. This mirrors the processing pipeline stages and scales cleanly when new months or years are added — just change `YEAR` / `MONTH` in `tejas/config.py`.
 
 ---
 

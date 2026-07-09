@@ -20,7 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import pandas as pd
-from tejas.config import YEAR, MONTH, MISSING_DAYS, PROCESSED_DIR, UNIFIED_DIR
+from tejas.config import YEAR, MONTH, MISSING_DAYS, UNIFIED_DIR
 from tejas.ingestion.unified_builder import save_unified_day
 
 
@@ -65,7 +65,7 @@ def main():
     )
     parser.add_argument(
         "--output-dir", type=str, default=None,
-        help="Output directory for Parquet files. Default: data/processed/unified/"
+        help="Output directory for Parquet files. Default: data/processed/unified/YYYY/MM/"
     )
     args = parser.parse_args()
 
@@ -138,8 +138,8 @@ def main():
     # Save ingestion summary
     total_elapsed = time.time() - t_start_total
     summary_df = pd.DataFrame(results)
-    summary_path = PROCESSED_DIR / "ingestion_summary.csv"
-    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    summary_path = output_dir / "ingestion_summary.csv"
+    output_dir.mkdir(parents=True, exist_ok=True)
     summary_df.to_csv(summary_path, index=False)
 
     # Print final summary

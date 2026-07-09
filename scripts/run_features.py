@@ -8,8 +8,8 @@ Usage:
     python scripts/run_features.py
 
 Output:
-    - Feature Parquet files in data/features/
-    - feature_summary.csv alongside the Parquet files
+    - Feature Parquet files in data/features/YYYY/MM/
+    - feature_summary.csv in data/features/YYYY/MM/
 """
 
 import sys

@@ -19,9 +19,8 @@ RAW_DIR = DATA_DIR / "raw"
 SOLEXS_DIR = RAW_DIR / "solexs"
 HEL1OS_DIR = RAW_DIR / "hel1os"
 
-# Processed output
+# Processed output root
 PROCESSED_DIR = DATA_DIR / "processed"
-UNIFIED_DIR = PROCESSED_DIR / "unified"
 
 # EDA outputs (existing, untouched)
 EDA_OUTPUT_DIR = PROJECT_DIR / "outputs" / "eda"
@@ -34,6 +33,11 @@ MONTH = "05"
 
 # Day 22 is missing from both instruments
 MISSING_DAYS = {"22"}
+
+# Per-month output subdirectories (type → year → month).
+# Update YEAR / MONTH above to switch to a different month.
+# Structure: data/processed/unified/YYYY/MM/
+UNIFIED_DIR = PROCESSED_DIR / "unified" / YEAR / MONTH
 
 
 # ── SoLEXS Configuration ────────────────────────────────────────────────────
@@ -100,8 +104,9 @@ ZERO_COUNT_EPS = 0.5
 
 # ── Phase 3: Processing & Cleaning ──────────────────────────────────────────
 
-# Output directory for clean processed data (separate from Phase 2 unified)
-CLEAN_DIR = PROCESSED_DIR / "clean"
+# Output directory for clean processed data.
+# Structure: data/processed/clean/YYYY/MM/
+CLEAN_DIR = PROCESSED_DIR / "clean" / YEAR / MONTH
 
 # Spike removal parameters (per instrument).
 # window:          rolling-median window in seconds (must be odd)
@@ -138,8 +143,9 @@ CZT_BG_SIGNIFICANCE = 3.0       # n × background noise → "above background"
 
 # ── Phase 4: Feature Engineering ─────────────────────────────────────────
 
-# Output directory for engineered features
-FEATURES_DIR = DATA_DIR / "features"
+# Output directory for engineered features.
+# Structure: data/features/YYYY/MM/
+FEATURES_DIR = DATA_DIR / "features" / YEAR / MONTH
 
 # Rolling window sizes (seconds) for temporal features.
 # All windows are strictly trailing (causal) — no future data leakage.

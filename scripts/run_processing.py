@@ -8,8 +8,8 @@ Usage:
     python scripts/run_processing.py
 
 Output:
-    - Clean Parquet files in data/processed/clean/
-    - processing_summary.csv alongside the Parquet files
+    - Clean Parquet files in data/processed/clean/YYYY/MM/
+    - processing_summary.csv in data/processed/clean/YYYY/MM/
 """
 
 import sys
