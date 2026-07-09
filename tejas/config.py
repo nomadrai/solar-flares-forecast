@@ -170,3 +170,40 @@ CUSUM_RESET_INTERVAL_S = 1800
 # Z-score denominator floor.  Prevents divide-by-zero when trailing
 # std is near zero (very stable quiet periods).
 ZSCORE_STD_FLOOR = 0.1
+
+
+# ── Phase 5: Flare Detection ────────────────────────────────────────────────
+
+# Output directory for detection results.
+# Structure: data/detection/YYYY/MM/
+DETECTION_DIR = DATA_DIR / "detection" / YEAR / MONTH
+
+# Adaptive threshold parameters.
+# The detector uses a trailing rolling baseline (mean + std) and triggers
+# when the signal's z-score exceeds DETECTION_SIGMA_START.  The flare ends
+# when the z-score falls back below DETECTION_SIGMA_END.
+DETECTION_BASELINE_WINDOW_S = 600     # 10-min trailing window for baseline
+DETECTION_SIGMA_START = 3.5           # σ above baseline to trigger start
+DETECTION_SIGMA_END = 1.5             # σ above baseline to declare end
+
+# Event filtering.
+# EDA catalogue: median duration = 11s, min = 6s.  MIN_DURATION must be
+# below the shortest known event.
+DETECTION_MIN_DURATION_S = 5          # discard events shorter than 5s
+DETECTION_MIN_GAP_S = 60             # merge events within 60s of each other
+DETECTION_MAX_DURATION_S = 10800     # 3h — discard pathologically long events
+
+# CZT significance threshold.
+# CZT detection only fires when czt_net_rate exceeds this multiple of
+# the estimated background noise level (from Phase 3).
+DETECTION_CZT_SIGNIFICANCE = 3.0
+
+# Cross-matching window for building the master catalogue.
+# A soft and hard X-ray event are considered the same physical event
+# if their time ranges overlap or their peaks are within this window.
+DETECTION_CROSS_MATCH_WINDOW_S = 300  # ±5 min
+
+# Forecasting label horizons (minutes).
+# Binary labels: "is there a flare start within h minutes?"
+# These are retrospective labels for training only — never used at inference.
+DETECTION_LABEL_HORIZONS_MIN = [5, 15, 30, 60]

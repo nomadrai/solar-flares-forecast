@@ -55,12 +55,23 @@ data/
 │               ├── 2026-05-01.parquet
 │               ├── ...
 │               └── processing_summary.csv
-└── features/                             ← Phase 4 output
+└── features/                             <- Phase 4 output
     └── 2026/
         └── 05/
             ├── 2026-05-01.parquet
             ├── ...
             └── feature_summary.csv
+└── detection/                            <- Phase 5 output
+    └── 2026/
+        └── 05/
+            ├── 2026-05-01.parquet        (labelled features + detection columns)
+            ├── 2026-05-01_catalogue.csv  (per-day master catalogue)
+            ├── 2026-05-01_solexs.csv     (per-day SoLEXS independent catalogue)
+            ├── 2026-05-01_cdte.csv       (per-day CdTe independent catalogue)
+            ├── 2026-05-01_czt.csv        (per-day CZT independent catalogue)
+            ├── ...
+            ├── master_catalogue.csv      (consolidated multi-day catalogue)
+            └── detection_summary.csv
 ```
 
 All directories follow **type-first, then chronological** (`type/year/month/`). Raw data additionally nests by day. This mirrors the processing pipeline stages and scales cleanly when new months or years are added — just change `YEAR` / `MONTH` in `tejas/config.py`.

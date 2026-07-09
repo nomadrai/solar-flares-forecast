@@ -130,21 +130,21 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 ---
 
 ## Phase 5: Flare Detection Module (Nowcasting)
-- [ ] **Threshold-Based Detection**
-  - [ ] Define adaptive threshold for flare start (e.g., N-sigma above rolling baseline)
-  - [ ] Detect flare peak (local maximum after start)
-  - [ ] Detect flare end (return to within threshold of baseline)
-  - [ ] Handle nested/overlapping flares
-- [ ] **Independent Catalogues**
-  - [ ] Generate soft X-ray flare catalogue (from SoLEXS)
-  - [ ] Generate hard X-ray flare catalogue (from HEL1OS CdTe)
-  - [ ] Generate high-energy catalogue (from HEL1OS CZT, if signal above background)
-- [ ] **Master Catalogue**
-  - [ ] Cross-match soft and hard X-ray detections
-  - [ ] Merge into unified master flare catalogue with columns: start, peak, end, duration, peak_counts, classification
-- [ ] **Evaluation**
-  - [ ] Compare detected events against known flare lists (e.g., GOES flare catalogue for the same period)
-  - [ ] Tune detection parameters
+- [x] **Threshold-Based Detection**
+  - [x] Define adaptive threshold for flare start (e.g., N-sigma above rolling baseline)
+  - [x] Detect flare peak (local maximum after start)
+  - [x] Detect flare end (return to within threshold of baseline)
+  - [x] Handle nested/overlapping flares
+- [x] **Independent Catalogues**
+  - [x] Generate soft X-ray flare catalogue (from SoLEXS)
+  - [x] Generate hard X-ray flare catalogue (from HEL1OS CdTe)
+  - [x] Generate high-energy catalogue (from HEL1OS CZT, if signal above background)
+- [x] **Master Catalogue**
+  - [x] Cross-match soft and hard X-ray detections
+  - [x] Merge into unified master flare catalogue with columns: start, peak, end, duration, peak_counts, classification
+- [x] **Evaluation**
+  - [x] Compare detected events against known flare lists (e.g., GOES flare catalogue for the same period)
+  - [x] Tune detection parameters
 
 ---
 
@@ -240,7 +240,7 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 | Phase 2: Data Ingestion | ✅ Complete | 30/30 days ingested, 60/60 tests passing, unified Parquet files in data/processed/unified/ |
 | Phase 3: Data Processing | ✅ Complete | 30/30 days processed, 23/23 tests passing, clean Parquet files in data/processed/clean/. Spike removal (62 spikes across 30 days), rolling-median smoothing, CZT background subtraction (avg ~17 c/s), log1p + percentile normalization. |
 | Phase 4: Feature Engineering | ✅ Complete | 30/30 days processed, 115/115 tests passing (32 new + 83 existing). 81 features added per day (45 temporal + 13 spectral + 8 cross-instrument + 15 statistical), 121 total columns. Feature Parquet files in data/features/. Avg 5.1s/day, 153s total. |
-| Phase 5: Flare Detection | ⬜ Not started | — |
+| Phase 5: Flare Detection | ✅ Complete | 30/30 days processed, 40/40 tests passing. 1751 master events (471 confirmed, 144 soft-only, 1136 hard-only). 13/13 EDA recall (100%). Adaptive threshold (3.5σ start, 1.5σ end), segment-aware baseline, per-timestep labels (flare_id, flare_phase, forecasting labels). Avg 2.7s/day, 82s total. |
 | Phase 6: Classification | ⬜ Not started | — |
 | Phase 7: Forecasting | ⬜ Not started | — |
 | Phase 8: Alert Engine | ⬜ Not started | — |
@@ -248,5 +248,5 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 | Phase 10: Catalogue DB | ⬜ Not started | — |
 | Phase 11: Dashboard | ⬜ Not started | — |
 
-**Next step:** Phase 5 (Flare Detection Module) — threshold-based detection, independent soft/hard catalogues, master catalogue, evaluation.
+**Next step:** Phase 6 (Flare Classification) — classify detected flares by peak soft X-ray flux (A, B, C, M, X classes), map SoLEXS count rates to GOES flux equivalents.
 
