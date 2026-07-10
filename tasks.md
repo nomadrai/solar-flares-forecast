@@ -149,10 +149,10 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 ---
 
 ## Phase 6: Flare Classification
-- [ ] Classify detected flares by peak soft X-ray flux (A, B, C, M, X classes)
-- [ ] Map SoLEXS SDD2 count rates to GOES flux equivalents (calibration/correlation)
-- [ ] Add classification to the master flare catalogue
-- [ ] Validate classifications against GOES data if available
+- [x] Classify detected flares by peak soft X-ray flux (A, B, C, M, X classes)
+- [x] Map SoLEXS SDD2 count rates to GOES flux equivalents (calibration/correlation)
+- [x] Add classification to the master flare catalogue
+- [x] Validate classifications against GOES data if available
 
 ---
 
@@ -231,7 +231,7 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 
 ## Current Status
 
-**Last updated:** 2026-07-09
+**Last updated:** 2026-07-10
 
 | Phase | Status | Notes |
 |---|---|---|
@@ -241,12 +241,12 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 | Phase 3: Data Processing | ✅ Complete | 30/30 days processed, 23/23 tests passing, clean Parquet files in data/processed/clean/. Spike removal (62 spikes across 30 days), rolling-median smoothing, CZT background subtraction (avg ~17 c/s), log1p + percentile normalization. |
 | Phase 4: Feature Engineering | ✅ Complete | 30/30 days processed, 115/115 tests passing (32 new + 83 existing). 81 features added per day (45 temporal + 13 spectral + 8 cross-instrument + 15 statistical), 121 total columns. Feature Parquet files in data/features/. Avg 5.1s/day, 153s total. |
 | Phase 5: Flare Detection | ✅ Complete | 30/30 days processed, 40/40 tests passing. 1751 master events (471 confirmed, 144 soft-only, 1136 hard-only). 13/13 EDA recall (100%). Adaptive threshold (3.5σ start, 1.5σ end), segment-aware baseline, per-timestep labels (flare_id, flare_phase, forecasting labels). Avg 2.7s/day, 82s total. |
-| Phase 6: Classification | ⬜ Not started | — |
+| Phase 6: Classification | ✅ Complete | 1751/1751 events classified, 20/20 tests passing. Native intensity bins (faint=364, weak=208, moderate=34, strong=8, severe=1) for 615 soft-detected events; 1136 hard-only preserved with NULL classification. Strongest event (2026-05-10, 3667 c/s) → severe. Optional GOES calibration module (fetch + log-log fit + A/B/C/M/X + magnitude) available via `--calibrate`. Runtime 0.1s. |
 | Phase 7: Forecasting | ⬜ Not started | — |
 | Phase 8: Alert Engine | ⬜ Not started | — |
 | Phase 9: Explainability | ⬜ Not started | — |
 | Phase 10: Catalogue DB | ⬜ Not started | — |
 | Phase 11: Dashboard | ⬜ Not started | — |
 
-**Next step:** Phase 6 (Flare Classification) — classify detected flares by peak soft X-ray flux (A, B, C, M, X classes), map SoLEXS count rates to GOES flux equivalents.
+**Next step:** Phase 7 (Forecasting Module) — build the "flare within next N minutes" training labels, train baseline + tree-based models on Phase 4 features, and produce a multi-horizon inference pipeline (5/15/30/60-min windows).
 

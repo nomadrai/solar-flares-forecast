@@ -207,3 +207,35 @@ DETECTION_CROSS_MATCH_WINDOW_S = 300  # ±5 min
 # Binary labels: "is there a flare start within h minutes?"
 # These are retrospective labels for training only — never used at inference.
 DETECTION_LABEL_HORIZONS_MIN = [5, 15, 30, 60]
+
+
+# ── Phase 6: Flare Classification ───────────────────────────────────────────
+
+# Output directory for classification results.
+# Structure: data/classification/YYYY/MM/
+CLASSIFICATION_DIR = DATA_DIR / "classification" / YEAR / MONTH
+
+# Optional GOES reference data (only populated if user runs fetch_goes_data.py).
+GOES_REFERENCE_DIR = DATA_DIR / "reference" / "goes" / YEAR / MONTH
+
+# Persisted count → flux calibration artifact (produced by calibration module).
+CALIBRATION_ARTIFACT = DATA_DIR / "reference" / "calibration" / "solexs_to_goes.json"
+
+# Native TEJAS intensity bins.  Applied to peak_solexs_counts (c/s).
+# Observed range across May 2026: 14–3667 c/s.  Bin edges scale ~4-5× per step,
+# mirroring the order-of-magnitude structure of GOES letter classes.
+INTENSITY_BIN_EDGES = [25, 100, 400, 1500]
+INTENSITY_BIN_LABELS = ["faint", "weak", "moderate", "strong", "severe"]
+
+# Log-scale ceiling for the intensity_score.  score = log(counts+1) / log(ceiling).
+INTENSITY_SCORE_MAX_COUNTS = 4000
+
+# GOES class flux thresholds (W/m^2, 1–8 Å channel).
+# Standard NOAA definition: A < 1e-7, B 1e-7–1e-6, C 1e-6–1e-5, M 1e-5–1e-4, X ≥ 1e-4.
+# The magnitude within a class is flux / threshold (rounded to 1 decimal).
+GOES_CLASS_THRESHOLDS = {"A": 1e-8, "B": 1e-7, "C": 1e-6, "M": 1e-5, "X": 1e-4}
+
+# Calibration parameters.
+CALIBRATION_MIN_SAMPLES = 20        # need ≥20 matched events to attempt a fit
+CALIBRATION_MIN_R2 = 0.5            # reject fits below this
+GOES_MATCH_TOLERANCE_S = 30         # ±30s search window around peak_time
