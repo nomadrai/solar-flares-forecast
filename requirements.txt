@@ -9,6 +9,7 @@ scikit-learn
 xgboost
 lightgbm
 torch  # PyTorch
+joblib  # Phase 7 model artifact I/O (also a sklearn transitive dep)
 
 # Visualization & Dashboard
 plotly

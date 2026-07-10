@@ -157,23 +157,23 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 ---
 
 ## Phase 7: Forecasting Module
-- [ ] **Training Data Preparation**
-  - [ ] Label time series with "flare within next N minutes" (binary label for multiple horizons)
-  - [ ] Create train/validation/test splits (chronological, no data leakage)
-  - [ ] Balance classes (flare vs non-flare periods)
-- [ ] **Model Development**
-  - [ ] Baseline model: logistic regression on engineered features
-  - [ ] Tree-based models: XGBoost / LightGBM
-  - [ ] Evaluate need for sequence models (LSTM, Transformer) — only if tree models insufficient
-  - [ ] Multi-horizon output: predict probability for 5, 15, 30, 60 minute windows
-- [ ] **Training & Evaluation**
-  - [ ] Train with strict temporal separation (no future leakage)
-  - [ ] Evaluate: precision, recall, F1, false alarm rate, lead time
-  - [ ] Feature importance analysis
-  - [ ] Save trained models to `models/`
-- [ ] **Inference Pipeline**
-  - [ ] Build streaming inference function (input: current + historical features → output: probabilities)
-  - [ ] Enforce no-future-data constraint during inference
+- [x] **Training Data Preparation**
+  - [x] Label time series with "flare within next N minutes" (binary label for multiple horizons)
+  - [x] Create train/validation/test splits (chronological, no data leakage)
+  - [x] Balance classes (flare vs non-flare periods)
+- [x] **Model Development**
+  - [x] Baseline model: logistic regression on engineered features
+  - [x] Tree-based models: XGBoost / LightGBM
+  - [x] Evaluate need for sequence models (LSTM, Transformer) — only if tree models insufficient
+  - [x] Multi-horizon output: predict probability for 5, 15, 30, 60 minute windows
+- [x] **Training & Evaluation**
+  - [x] Train with strict temporal separation (no future leakage)
+  - [x] Evaluate: precision, recall, F1, false alarm rate, lead time
+  - [x] Feature importance analysis
+  - [x] Save trained models to `models/`
+- [x] **Inference Pipeline**
+  - [x] Build streaming inference function (input: current + historical features → output: probabilities)
+  - [x] Enforce no-future-data constraint during inference
 
 ---
 
@@ -231,7 +231,7 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 
 ## Current Status
 
-**Last updated:** 2026-07-10
+**Last updated:** 2026-07-11
 
 | Phase | Status | Notes |
 |---|---|---|
@@ -242,11 +242,11 @@ This file tracks all phases and tasks for the TEJAS project. Use this to jump ba
 | Phase 4: Feature Engineering | ✅ Complete | 30/30 days processed, 115/115 tests passing (32 new + 83 existing). 81 features added per day (45 temporal + 13 spectral + 8 cross-instrument + 15 statistical), 121 total columns. Feature Parquet files in data/features/. Avg 5.1s/day, 153s total. |
 | Phase 5: Flare Detection | ✅ Complete | 30/30 days processed, 40/40 tests passing. 1751 master events (471 confirmed, 144 soft-only, 1136 hard-only). 13/13 EDA recall (100%). Adaptive threshold (3.5σ start, 1.5σ end), segment-aware baseline, per-timestep labels (flare_id, flare_phase, forecasting labels). Avg 2.7s/day, 82s total. |
 | Phase 6: Classification | ✅ Complete | 1751/1751 events classified, 20/20 tests passing. Native intensity bins (faint=364, weak=208, moderate=34, strong=8, severe=1) for 615 soft-detected events; 1136 hard-only preserved with NULL classification. Strongest event (2026-05-10, 3667 c/s) → severe. Optional GOES calibration module (fetch + log-log fit + A/B/C/M/X + magnitude) available via `--calibrate`. Runtime 0.1s. |
-| Phase 7: Forecasting | ⬜ Not started | — |
+| Phase 7: Forecasting | ✅ Complete | 12 models trained (3 algorithms × 4 horizons), 48/48 tests passing. 237k rows @ 10s cadence, 119 features, 20/5/5 blocked chronological split with 1-hour purge. XGBoost best: test PR-AUC 0.22 / 0.46 / 0.69 / 0.88 for 5/15/30/60-min horizons. Streaming Forecaster API + 5 no-leakage tripwires. Artifacts in outputs/models/2026/05/. |
 | Phase 8: Alert Engine | ⬜ Not started | — |
 | Phase 9: Explainability | ⬜ Not started | — |
 | Phase 10: Catalogue DB | ⬜ Not started | — |
 | Phase 11: Dashboard | ⬜ Not started | — |
 
-**Next step:** Phase 7 (Forecasting Module) — build the "flare within next N minutes" training labels, train baseline + tree-based models on Phase 4 features, and produce a multi-horizon inference pipeline (5/15/30/60-min windows).
+**Next step:** Phase 8 (Alert Engine) — define Normal / Watch / Warning / Critical levels, map the four horizon probabilities from Phase 7's `Forecaster` to alert levels (configurable thresholds), and generate alert messages with context (current readings, contributing features, active flare status from Phase 5).
 

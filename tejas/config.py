@@ -239,3 +239,75 @@ GOES_CLASS_THRESHOLDS = {"A": 1e-8, "B": 1e-7, "C": 1e-6, "M": 1e-5, "X": 1e-4}
 CALIBRATION_MIN_SAMPLES = 20        # need ≥20 matched events to attempt a fit
 CALIBRATION_MIN_R2 = 0.5            # reject fits below this
 GOES_MATCH_TOLERANCE_S = 30         # ±30s search window around peak_time
+
+
+# ── Phase 7: Forecasting ────────────────────────────────────────────────────
+
+# Output directories.  Model artifacts go under outputs/ (git-ignored);
+# derived training frames + evaluation reports go under data/forecasting/.
+FORECAST_DIR = DATA_DIR / "forecasting" / YEAR / MONTH
+MODELS_DIR = PROJECT_DIR / "outputs" / "models" / YEAR / MONTH
+
+# Training cadence.  10s is the primary cadence (keeps ~250k rows across 30
+# days, preserves precursor dynamics without redundant 1s samples).  30s is
+# an optional benchmark run.  1s cadence is preserved upstream but not used
+# for training (excessive redundancy, positive-class dilution).
+FORECAST_CADENCE_S = 10
+FORECAST_BENCHMARK_CADENCE_S = 30
+
+# Multi-horizon binary forecast targets (minutes).  One model per horizon.
+# Mirrors DETECTION_LABEL_HORIZONS_MIN so downstream label columns align.
+FORECAST_LABEL_HORIZONS_MIN = [5, 15, 30, 60]
+
+# Chronological blocked split.  Day strings ("01".."31").  Day 22 is missing
+# and is intentionally excluded from every split.  Ordering is train → val →
+# test with no overlap.
+FORECAST_TRAIN_DAYS = [f"{d:02d}" for d in range(1, 21)]        # 01..20
+FORECAST_VAL_DAYS = ["21", "23", "24", "25", "26"]              # 22 missing
+FORECAST_TEST_DAYS = ["27", "28", "29", "30", "31"]
+
+# Purge gap (seconds) applied to the tail of each split before the next
+# split begins.  Prevents a 60-min horizon label at the end of train from
+# depending on truth from the beginning of val.  Set slightly above the
+# longest horizon (60 min) to be safe.
+FORECAST_SPLIT_PURGE_S = 3600
+
+# Columns that must NEVER enter the feature matrix.  Enforced independently
+# in sampling.select_feature_columns AND inference.Forecaster.predict_row
+# so a bug in one choke point does not create a leak.
+FORECAST_DROP_COLUMNS = {
+    "datetime", "time_unix", "segment_id",
+    "flare_id", "is_flare_active", "flare_phase",
+    "label_minutes_to_next_flare",
+    "label_flare_within_5m", "label_flare_within_15m",
+    "label_flare_within_30m", "label_flare_within_60m",
+}
+
+# Rolling-window features produce NaN for the first N-1 samples of each
+# segment.  Rows missing more than (1 - this ratio) of features are dropped
+# before training rather than forward-filled (matches Phase 5 convention).
+FORECAST_MIN_NONNULL_FEATURE_RATIO = 0.95
+
+# Model hyperparameters.  Deliberately modest — the dataset is small and
+# over-parameterised trees will over-fit day-of-month idiosyncrasies.
+FORECAST_XGB_PARAMS = dict(
+    max_depth=6, n_estimators=400, learning_rate=0.05,
+    subsample=0.8, colsample_bytree=0.8,
+    objective="binary:logistic", tree_method="hist", eval_metric="aucpr",
+)
+FORECAST_LGBM_PARAMS = dict(
+    num_leaves=63, n_estimators=500, learning_rate=0.05,
+    subsample=0.8, colsample_bytree=0.8,
+    objective="binary", metric="average_precision",
+)
+FORECAST_LOGREG_PARAMS = dict(
+    C=1.0, class_weight="balanced",
+    solver="lbfgs", max_iter=2000,
+)
+
+# Evaluation.
+# DECISION_THRESHOLD_DEFAULT is only used if val-based tuning fails
+# (e.g., zero positives in val fold).  Otherwise per-horizon thresholds
+# are tuned on val to maximise F1.
+FORECAST_DECISION_THRESHOLD_DEFAULT = 0.5
+FORECAST_LEAD_TIME_MIN_PROB = 0.5     # first ts with p >= this counts as lead

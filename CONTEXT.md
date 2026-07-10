@@ -41,6 +41,8 @@ Classify detected solar flare events into standard categories (e.g., A, B, C, M,
 ### 7. Forecasting Module
 Predict the probability of a flare occurring within multiple future time windows (e.g., next 5, 15, 30 mins) strictly using historical context available at the prediction time.
 
+> **Reference:** `forecasting_catalog.md` is the complete reference for the forecasting module — model architectures, training/split protocol, inference API, and the no-future-data tripwires enforced by the code.
+
 ### 8. Alert Engine
 Generate actionable operational alerts based on the model's output, such as high flare probability warnings or active flare detections.
 
