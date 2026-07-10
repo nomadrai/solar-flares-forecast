@@ -288,26 +288,76 @@ FORECAST_DROP_COLUMNS = {
 # before training rather than forward-filled (matches Phase 5 convention).
 FORECAST_MIN_NONNULL_FEATURE_RATIO = 0.95
 
-# Model hyperparameters.  Deliberately modest — the dataset is small and
-# over-parameterised trees will over-fit day-of-month idiosyncrasies.
+# Model hyperparameters.  Trees are moderately deep with explicit L1/L2
+# regularisation and min_child_weight to guard against over-fitting on
+# small folds.  Higher n_estimators is intentional — early stopping caps
+# the effective depth using val (see FORECAST_EARLY_STOPPING_ROUNDS).
 FORECAST_XGB_PARAMS = dict(
-    max_depth=6, n_estimators=400, learning_rate=0.05,
-    subsample=0.8, colsample_bytree=0.8,
+    max_depth=7, n_estimators=1200, learning_rate=0.03,
+    subsample=0.85, colsample_bytree=0.85, colsample_bylevel=0.85,
+    min_child_weight=5.0, gamma=0.1,
+    reg_alpha=0.05, reg_lambda=1.5,
     objective="binary:logistic", tree_method="hist", eval_metric="aucpr",
+    n_jobs=-1,
 )
 FORECAST_LGBM_PARAMS = dict(
-    num_leaves=63, n_estimators=500, learning_rate=0.05,
-    subsample=0.8, colsample_bytree=0.8,
+    num_leaves=127, max_depth=-1, n_estimators=1500, learning_rate=0.03,
+    subsample=0.85, subsample_freq=1, colsample_bytree=0.85,
+    min_child_samples=40, min_split_gain=0.0,
+    reg_alpha=0.05, reg_lambda=1.5,
     objective="binary", metric="average_precision",
+    n_jobs=-1,
 )
 FORECAST_LOGREG_PARAMS = dict(
-    C=1.0, class_weight="balanced",
-    solver="lbfgs", max_iter=2000,
+    C=0.5, class_weight="balanced",
+    solver="lbfgs", max_iter=3000,
 )
 
-# Evaluation.
+# Class-weighting policy for tree models.  The raw ``n_neg / n_pos`` ratio
+# tends to collapse predictions to trivially positive on the majority
+# class; ``sqrt`` softens that.  The cap prevents one horizon from
+# dominating the fit when the imbalance is extreme.
+FORECAST_USE_SQRT_SPW = True
+FORECAST_SPW_CAP = 12.0
+
+# Early stopping for tree models.  Uses the val split as the eval set.
+# ``0`` disables early stopping.  Sits well below n_estimators to allow
+# genuine convergence to be caught by the plateau detector.
+FORECAST_EARLY_STOPPING_ROUNDS = 60
+
+# Probability calibration.  Applied to raw model probs using the val
+# split as the reference distribution.  Options:
+#   ``"none"``      — pass through the raw probabilities.
+#   ``"isotonic"``  — non-parametric monotonic calibration (recommended
+#                     for tree ensembles; needs enough val positives).
+#   ``"sigmoid"``   — Platt scaling (single-parameter, more stable when
+#                     positives are scarce).
+# When the requested calibrator cannot be fit (e.g. no val positives) the
+# training path silently falls back to ``"none"`` for that horizon.
+FORECAST_CALIBRATION_METHOD = "isotonic"
+
+# Evaluation & threshold-optimisation policy.
+#
+# ``FORECAST_THRESHOLD_METRIC`` controls how per-horizon decision
+# thresholds are picked on the val split.  Options:
+#   ``"youden"``    — Youden's J = TPR - FPR.  Directly maximises "high
+#                     recall AND low FAR" and does NOT collapse to the
+#                     trivial "always positive" solution when the class
+#                     is imbalanced.  Preferred default.
+#   ``"fbeta"``     — F-beta with beta = FORECAST_FBETA (default 2 =
+#                     recall-oriented).
+#   ``"f1"``        — Classical F1 (previous default; retained for
+#                     backward compatibility).
+#   ``"far_constrained"`` — max recall subject to FAR <= FORECAST_TARGET_FAR.
+#   ``"precision_at_min_recall"`` — max precision subject to recall >=
+#                                    FORECAST_MIN_RECALL.
+FORECAST_THRESHOLD_METRIC = "youden"
+FORECAST_THRESHOLD_GRID_STEP = 0.01     # finer grid than the legacy 0.05
+FORECAST_FBETA = 2.0                    # only used when metric == "fbeta"
+FORECAST_TARGET_FAR = 0.15              # only used when metric == "far_constrained"
+FORECAST_MIN_RECALL = 0.85              # only used when metric == "precision_at_min_recall"
+
 # DECISION_THRESHOLD_DEFAULT is only used if val-based tuning fails
-# (e.g., zero positives in val fold).  Otherwise per-horizon thresholds
-# are tuned on val to maximise F1.
+# (e.g., zero positives in val fold).
 FORECAST_DECISION_THRESHOLD_DEFAULT = 0.5
 FORECAST_LEAD_TIME_MIN_PROB = 0.5     # first ts with p >= this counts as lead

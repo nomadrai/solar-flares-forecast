@@ -10,7 +10,10 @@ This document describes the Phase 7 forecasting module: how the models are train
 2. **Three algorithms, same feature contract.** Logistic Regression, XGBoost, LightGBM. All read the same frozen feature list. The dashboard defaults to XGBoost; LogReg + LightGBM are kept for benchmarking and explainability.
 3. **Chronological blocked splits with a purge gap.** Train = days 01–20, Val = 21+23–26 (22 missing), Test = 27–31. A 1-hour purge is applied to the tail of the train and val blocks so a 60-min-horizon label at the boundary cannot depend on truth from the next block.
 4. **No-future-data is enforced at two independent choke points.** Feature/label separation is checked once in `sampling.select_feature_columns` (blacklist) and once again in `Forecaster.predict_row` (allowlist + blacklist). See the [Tripwires](#no-future-data-tripwires) section.
-5. **Class imbalance handled via weighting only.** No synthetic samples (SMOTE, ADASYN). LogReg uses `class_weight="balanced"`; XGBoost and LightGBM compute `scale_pos_weight = n_neg / n_pos` from the train fold.
+5. **Class imbalance handled via weighting only.** No synthetic samples (SMOTE, ADASYN). LogReg uses `class_weight="balanced"`; XGBoost and LightGBM compute a **sqrt-tempered, capped `scale_pos_weight`** (see [Class weighting](#class-weighting)) — the raw `n_neg / n_pos` collapses long-horizon predictions to the trivial "always positive" solution.
+6. **Probability calibration on the val split.** After fitting on train, an isotonic calibrator is fit on the val split (raw prob → val label) and applied to test / inference. Improves Brier score and keeps the decision-threshold sweep on a well-behaved probability axis.
+7. **Threshold picked by Youden's J on val.** `J = TPR − FPR` is the scientifically defensible answer to "maximise recall AND minimise false-alarm rate". It does NOT degenerate to `threshold = 0` under class imbalance the way F1 / F-beta do.
+8. **Early stopping on val for tree models.** XGBoost and LightGBM stop when val AP plateaus (`FORECAST_EARLY_STOPPING_ROUNDS`), which prevents day-of-month over-fitting without shrinking the train fold.
 
 ---
 
@@ -60,7 +63,16 @@ All tunables live in `tejas/config.py` under the `Phase 7: Forecasting` block:
 | `FORECAST_SPLIT_PURGE_S` | `3600` | Purge gap between blocks (must ≥ longest horizon × 60) |
 | `FORECAST_DROP_COLUMNS` | (11 items) | Blacklist of columns never fed to a model |
 | `FORECAST_MIN_NONNULL_FEATURE_RATIO` | `0.95` | Threshold for dropping rows with too many NaNs |
-| `FORECAST_XGB_PARAMS`, `FORECAST_LGBM_PARAMS`, `FORECAST_LOGREG_PARAMS` | — | Model hyperparameters |
+| `FORECAST_XGB_PARAMS`, `FORECAST_LGBM_PARAMS`, `FORECAST_LOGREG_PARAMS` | — | Model hyperparameters (deeper trees + L1/L2 reg + early stopping enabled) |
+| `FORECAST_USE_SQRT_SPW` | `True` | Apply `sqrt` to `scale_pos_weight` so tree models don't collapse under extreme imbalance |
+| `FORECAST_SPW_CAP` | `12.0` | Upper bound on `scale_pos_weight` |
+| `FORECAST_EARLY_STOPPING_ROUNDS` | `60` | Val-based early stopping rounds for XGB / LGBM (`0` disables) |
+| `FORECAST_CALIBRATION_METHOD` | `"isotonic"` | Probability calibration on val (`isotonic` / `sigmoid` / `none`) |
+| `FORECAST_THRESHOLD_METRIC` | `"youden"` | Val-based decision-threshold objective (`youden` / `fbeta` / `f1` / `far_constrained` / `precision_at_min_recall`) |
+| `FORECAST_THRESHOLD_GRID_STEP` | `0.01` | Grid resolution for the sweep |
+| `FORECAST_FBETA` | `2.0` | `beta` for the `fbeta` metric option |
+| `FORECAST_TARGET_FAR` | `0.15` | FAR cap for the `far_constrained` metric option |
+| `FORECAST_MIN_RECALL` | `0.85` | Recall floor for the `precision_at_min_recall` metric option |
 | `FORECAST_DECISION_THRESHOLD_DEFAULT` | `0.5` | Fallback if val-based tuning fails |
 | `FORECAST_LEAD_TIME_MIN_PROB` | `0.5` | Probability crossing threshold used for lead-time computation |
 
@@ -79,12 +91,29 @@ For each `(horizon, algorithm)` combination:
 1. Assign each row a `train` / `val` / `test` label from the day-of-month in `datetime`.
 2. Apply the 1-hour purge to the tail of the `train` and `val` blocks.
 3. Build X / y arrays.
-4. Fit the model on `X_train`.
-5. Tune the decision threshold on val by sweeping `[0.05, 0.95]` in `0.05` steps and picking the argmax F1.
-6. Compute PR-AUC / ROC-AUC / precision / recall / F1 / false-alarm rate / Brier score on both val and test.
-7. Persist the model + threshold + frozen feature list via `joblib.dump`.
+4. Fit the model on `X_train`. For XGB / LGBM the fit uses `eval_set=[(X_val, y_val)]` and stops when val AP plateaus (`FORECAST_EARLY_STOPPING_ROUNDS`).
+5. **Calibrate** raw val probabilities with the configured method (`isotonic` by default) — the fitted calibrator is persisted alongside the model.
+6. **Tune the decision threshold on val** using the configured metric (`youden` by default) with the `FORECAST_THRESHOLD_GRID_STEP` grid.
+7. Compute PR-AUC / ROC-AUC / precision / recall / F1 / false-alarm rate / Brier score on both val and test (using calibrated probabilities).
+8. Persist the model + calibrator + threshold + frozen feature list via `joblib.dump`.
 
 A single `feature_columns.json` manifest is written once per training run.
+
+#### Class weighting
+
+For LogReg, `class_weight="balanced"` is used unchanged.  For tree models, `compute_scale_pos_weight` returns `sqrt(n_neg / n_pos)` when `FORECAST_USE_SQRT_SPW` is `True` (default) and clips the result to `FORECAST_SPW_CAP`.  The sqrt-tempering was introduced because the raw `n_neg / n_pos` combined with F1-tuning collapsed the 30 / 60 minute horizons to trivial "predict positive" decisions; the tempered weight, calibrated probabilities, and Youden-tuned threshold together push the decision surface off that degenerate corner without introducing any synthetic samples.
+
+#### Threshold metrics
+
+`tune_threshold` supports several strategies (`FORECAST_THRESHOLD_METRIC`):
+
+| Metric | What it optimises | When to use |
+|---|---|---|
+| `youden` (default) | `max(TPR − FPR)` | Balanced high-recall / low-FAR operations. |
+| `fbeta` | `F_beta` with `beta = FORECAST_FBETA` | Recall-heavy operations. **Note:** with the class imbalance in TEJAS this collapses to threshold ≈ 0 and yields FAR ≈ 1; use only if the operator explicitly wants that. |
+| `f1` | Classical F1 | Legacy default; retained for reproducibility of earlier runs. |
+| `far_constrained` | Max recall subject to `FAR ≤ FORECAST_TARGET_FAR` | Hard FAR budget from an SOC. |
+| `precision_at_min_recall` | Max precision subject to `recall ≥ FORECAST_MIN_RECALL` | Recall floor from a science requirement. |
 
 ### 3. `evaluate_all(algorithm="xgb")`
 
@@ -144,6 +173,12 @@ The strict no-future-data constraint (see `CONTEXT.md`) is enforced by **five in
 3. **`FORECAST_DROP_COLUMNS` blacklist in inference.** `Forecaster.predict_row` re-checks that no forbidden column is present in the input row.
 4. **Split purge.** `FORECAST_SPLIT_PURGE_S` (1 hour) drops the last hour of `train` and `val` before the next split begins. Tested to be ≥ `max(horizons_min) × 60`.
 5. **Noise-features leakage test.** A dedicated test replaces the entire feature matrix with uniform noise and asserts the test PR-AUC stays below 0.5. If any part of the pipeline were leaking future information, the model would score suspiciously well on noise.
+
+The optimisation additions above respect the same constraints:
+
+* Isotonic calibration is fit on val (chronologically after train) — never on test.
+* Early stopping uses `eval_set=[(X_val, y_val)]` — the val split is already after train in wall-clock time; no future information leaks into the train fit.
+* Threshold tuning uses val only — the test split is only consumed by the final evaluation.
 
 ---
 

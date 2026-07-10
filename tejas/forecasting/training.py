@@ -26,12 +26,21 @@ import pandas as pd
 from tejas.config import (
     MODELS_DIR,
     FORECAST_LABEL_HORIZONS_MIN,
+    FORECAST_THRESHOLD_METRIC,
+    FORECAST_CALIBRATION_METHOD,
+    FORECAST_EARLY_STOPPING_ROUNDS,
+    FORECAST_USE_SQRT_SPW,
+    FORECAST_SPW_CAP,
 )
 from tejas.forecasting.evaluation import (
     compute_metrics,
     tune_threshold,
 )
-from tejas.forecasting.models import ALGORITHMS, make_model
+from tejas.forecasting.models import (
+    ALGORITHMS,
+    compute_scale_pos_weight,
+    make_model,
+)
 from tejas.forecasting.splits import build_split_arrays
 
 
@@ -69,37 +78,163 @@ def train_one_horizon(
 
     t0 = time.time()
     model = make_model(algorithm, y_train=y_tr)
-    model.fit(X_tr, y_tr)
+    _fit_with_optional_early_stopping(model, algorithm, X_tr, y_tr, X_val, y_val)
     training_seconds = time.time() - t0
 
-    # Predictions
-    val_prob = _predict_proba_positive(model, X_val)
-    test_prob = _predict_proba_positive(model, X_te)
+    # Raw predictions from the fitted estimator.
+    val_prob_raw = _predict_proba_positive(model, X_val)
+    test_prob_raw = _predict_proba_positive(model, X_te)
 
-    threshold = tune_threshold(y_val, val_prob)
+    # Probability calibration on val (isotonic / sigmoid / none).
+    # Calibrator is fit on val ↔ val labels; downstream inference
+    # applies the same transform to keep test evaluation consistent.
+    calibrator = _fit_calibrator(val_prob_raw, y_val, FORECAST_CALIBRATION_METHOD)
+    val_prob = _apply_calibrator(calibrator, val_prob_raw)
+    test_prob = _apply_calibrator(calibrator, test_prob_raw)
+
+    # Threshold optimisation (config-selected metric — see
+    # FORECAST_THRESHOLD_METRIC).
+    threshold = tune_threshold(y_val, val_prob, metric=FORECAST_THRESHOLD_METRIC)
     val_metrics = compute_metrics(y_val, val_prob, threshold=threshold)
     test_metrics = compute_metrics(y_te, test_prob, threshold=threshold)
 
     # scale_pos_weight for the record (0/1 imbalance)
     n_pos_tr = int((y_tr == 1).sum())
     n_neg_tr = int((y_tr == 0).sum())
-    spw = (n_neg_tr / n_pos_tr) if n_pos_tr > 0 else 1.0
+    spw_raw = (n_neg_tr / n_pos_tr) if n_pos_tr > 0 else 1.0
+    spw_effective = (
+        compute_scale_pos_weight(
+            y_tr, use_sqrt=FORECAST_USE_SQRT_SPW, cap=FORECAST_SPW_CAP
+        )
+        if n_pos_tr > 0
+        else 1.0
+    )
 
     return {
         "algorithm": algorithm,
         "horizon_min": int(horizon_min),
         "model": model,
+        "calibrator": calibrator,
+        "calibration_method": FORECAST_CALIBRATION_METHOD if calibrator is not None else "none",
         "feature_columns": list(feature_cols),
         "decision_threshold": float(threshold),
+        "threshold_metric": FORECAST_THRESHOLD_METRIC,
         "val_metrics": val_metrics,
         "test_metrics": test_metrics,
         "n_train": int(len(y_tr)),
         "n_val": int(len(y_val)),
         "n_test": int(len(y_te)),
         "n_positive_train": n_pos_tr,
-        "scale_pos_weight": float(spw),
+        "scale_pos_weight": float(spw_raw),
+        "scale_pos_weight_effective": float(spw_effective),
         "training_seconds": round(training_seconds, 2),
     }
+
+
+def _fit_with_optional_early_stopping(
+    model, algorithm: str, X_tr, y_tr, X_val, y_val
+) -> None:
+    """Fit ``model`` with early stopping when supported.
+
+    Applies to tree ensembles only; LogReg is fit normally.  When val is
+    empty or contains a single class, early stopping is silently skipped
+    and the model is fit on train alone (still deterministic, but no
+    plateau detection).
+    """
+    rounds = int(FORECAST_EARLY_STOPPING_ROUNDS)
+    val_usable = (
+        rounds > 0
+        and len(y_val) > 0
+        and int((np.asarray(y_val) == 1).sum()) > 0
+        and int((np.asarray(y_val) == 0).sum()) > 0
+    )
+
+    if algorithm == "xgb" and val_usable:
+        try:
+            model.set_params(early_stopping_rounds=rounds)
+        except (ValueError, AttributeError):
+            pass
+        try:
+            model.fit(
+                X_tr, y_tr,
+                eval_set=[(X_val, y_val)],
+                verbose=False,
+            )
+            return
+        except TypeError:
+            # Older XGB signatures — fall through to plain fit.
+            pass
+
+    if algorithm == "lgbm" and val_usable:
+        try:
+            from lightgbm import early_stopping, log_evaluation
+
+            callbacks = [early_stopping(rounds, verbose=False), log_evaluation(0)]
+            model.fit(
+                X_tr, y_tr,
+                eval_set=[(X_val, y_val)],
+                eval_metric="average_precision",
+                callbacks=callbacks,
+            )
+            return
+        except (ImportError, TypeError):
+            pass
+
+    model.fit(X_tr, y_tr)
+
+
+# ── Probability calibration ────────────────────────────────────────────────
+
+
+def _fit_calibrator(prob: np.ndarray, y: np.ndarray, method: str):
+    """Fit a probability calibrator on (val probs, val labels).
+
+    Returns the fitted calibrator or ``None`` when calibration is
+    disabled / not learnable for this fold.  Isotonic requires both
+    classes present in ``y``; if only one class is present, we quietly
+    fall back to no calibration for that horizon.
+    """
+    method = str(method).lower()
+    if method in ("", "none", "off"):
+        return None
+
+    prob = np.asarray(prob, dtype=float)
+    y = np.asarray(y, dtype=np.int64)
+    if len(prob) < 20 or int((y == 1).sum()) == 0 or int((y == 0).sum()) == 0:
+        return None
+
+    if method == "isotonic":
+        from sklearn.isotonic import IsotonicRegression
+
+        iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
+        iso.fit(prob, y)
+        return iso
+
+    if method == "sigmoid":
+        # Platt scaling: fit a 1-D logistic regression on the raw probs.
+        from sklearn.linear_model import LogisticRegression
+
+        lr = LogisticRegression(C=1e6, solver="lbfgs")
+        lr.fit(prob.reshape(-1, 1), y)
+        return lr
+
+    raise ValueError(f"Unknown calibration method: {method!r}")
+
+
+def _apply_calibrator(calibrator, prob: np.ndarray) -> np.ndarray:
+    """Transform raw probabilities through a fitted calibrator."""
+    prob = np.asarray(prob, dtype=float)
+    if calibrator is None or len(prob) == 0:
+        return prob
+
+    from sklearn.isotonic import IsotonicRegression
+
+    if isinstance(calibrator, IsotonicRegression):
+        out = calibrator.predict(prob)
+    else:
+        # Sigmoid (LogisticRegression)
+        out = calibrator.predict_proba(prob.reshape(-1, 1))[:, 1]
+    return np.clip(np.asarray(out, dtype=float), 0.0, 1.0)
 
 
 def _predict_proba_positive(model, X: np.ndarray) -> np.ndarray:
@@ -194,11 +329,19 @@ def train_all(
                 joblib.dump(
                     {
                         "model": result["model"],
+                        "calibrator": result.get("calibrator"),
+                        "calibration_method": result.get("calibration_method", "none"),
                         "algorithm": result["algorithm"],
                         "horizon_min": result["horizon_min"],
                         "feature_columns": result["feature_columns"],
                         "decision_threshold": result["decision_threshold"],
+                        "threshold_metric": result.get(
+                            "threshold_metric", FORECAST_THRESHOLD_METRIC
+                        ),
                         "scale_pos_weight": result["scale_pos_weight"],
+                        "scale_pos_weight_effective": result.get(
+                            "scale_pos_weight_effective", result["scale_pos_weight"]
+                        ),
                     },
                     artifact_path,
                 )

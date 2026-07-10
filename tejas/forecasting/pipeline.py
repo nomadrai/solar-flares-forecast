@@ -30,6 +30,8 @@ from tejas.config import (
     FORECAST_TRAIN_DAYS,
     FORECAST_VAL_DAYS,
     FORECAST_TEST_DAYS,
+    FORECAST_THRESHOLD_METRIC,
+    FORECAST_CALIBRATION_METHOD,
     YEAR,
     MONTH,
 )
@@ -39,7 +41,7 @@ from tejas.forecasting.evaluation import (
     feature_importance,
     tune_threshold,
 )
-from tejas.forecasting.inference import _predict_positive
+from tejas.forecasting.inference import _apply_artifact_calibrator, _predict_positive
 from tejas.forecasting.models import ALGORITHMS
 from tejas.forecasting.sampling import (
     downsample,
@@ -286,7 +288,8 @@ def evaluate_all(
         model = art["model"]
         threshold = float(art["decision_threshold"])
 
-        prob = _predict_positive(model, X_test)
+        raw_prob = _predict_positive(model, X_test)
+        prob = _apply_artifact_calibrator(art, raw_prob)
         y_true = test_df[f"label_flare_within_{h}m"].fillna(0).astype(np.int8).to_numpy()
         m = compute_metrics(y_true, prob, threshold=threshold)
         m["algorithm"] = algorithm
@@ -346,6 +349,10 @@ def _write_report(metrics_df: pd.DataFrame, lead_df: pd.DataFrame, output_dir: P
         "# TEJAS Phase 7 — Forecast Evaluation Report",
         "",
         f"- **Algorithm evaluated**: `{algorithm}`",
+        f"- **Threshold metric**: `{FORECAST_THRESHOLD_METRIC}`  "
+        f"(tuned on the val split; higher = fewer positives)",
+        f"- **Probability calibration**: `{FORECAST_CALIBRATION_METHOD}`  "
+        f"(fit on val, applied to test)",
         f"- **Test window**: computed from the training frame test split.",
         "",
         "## Test-set metrics",
@@ -378,7 +385,10 @@ def _write_report(metrics_df: pd.DataFrame, lead_df: pd.DataFrame, output_dir: P
             )
         lines.append("")
 
-    lines.append("_Metrics use the val-tuned decision threshold (max F1)._")
+    lines.append(
+        f"_Metrics use the val-tuned decision threshold (metric = "
+        f"`{FORECAST_THRESHOLD_METRIC}`) applied to calibrated probabilities._"
+    )
 
     path = output_dir / "forecast_report.md"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

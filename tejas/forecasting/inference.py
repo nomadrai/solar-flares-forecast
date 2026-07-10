@@ -59,8 +59,10 @@ class Forecaster:
         X = row.reindex(self.feature_columns).to_numpy(dtype=float).reshape(1, -1)
         out: dict[str, float] = {}
         for h in FORECAST_LABEL_HORIZONS_MIN:
-            model = self.horizon_models[h]["model"]
-            out[f"prob_{h}m"] = float(_predict_positive(model, X)[0])
+            artifact = self.horizon_models[h]
+            raw = _predict_positive(artifact["model"], X)
+            calibrated = _apply_artifact_calibrator(artifact, raw)
+            out[f"prob_{h}m"] = float(calibrated[0])
         return out
 
     def predict_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -69,8 +71,9 @@ class Forecaster:
         X = df.reindex(columns=self.feature_columns).to_numpy(dtype=float)
         out = pd.DataFrame(index=df.index)
         for h in FORECAST_LABEL_HORIZONS_MIN:
-            model = self.horizon_models[h]["model"]
-            out[f"prob_{h}m"] = _predict_positive(model, X)
+            artifact = self.horizon_models[h]
+            raw = _predict_positive(artifact["model"], X)
+            out[f"prob_{h}m"] = _apply_artifact_calibrator(artifact, raw)
         return out
 
     def decision_thresholds(self) -> dict[int, float]:
@@ -162,3 +165,24 @@ def _predict_positive(model, X: np.ndarray) -> np.ndarray:
             return probs[:, 0]
         return 1.0 - probs[:, 0]
     return probs[:, 1]
+
+
+def _apply_artifact_calibrator(artifact: dict, prob: np.ndarray) -> np.ndarray:
+    """Apply a persisted calibrator (isotonic / sigmoid) to raw probs.
+
+    Older artifacts written before Phase 7 added calibration do not
+    carry a calibrator; those are passed through unchanged.
+    """
+    calibrator = artifact.get("calibrator") if isinstance(artifact, dict) else None
+    prob = np.asarray(prob, dtype=float)
+    if calibrator is None or len(prob) == 0:
+        return prob
+    try:
+        from sklearn.isotonic import IsotonicRegression
+    except ImportError:  # pragma: no cover
+        return prob
+    if isinstance(calibrator, IsotonicRegression):
+        out = calibrator.predict(prob)
+    else:
+        out = calibrator.predict_proba(prob.reshape(-1, 1))[:, 1]
+    return np.clip(np.asarray(out, dtype=float), 0.0, 1.0)

@@ -16,6 +16,11 @@ import pandas as pd
 from tejas.config import (
     FORECAST_DECISION_THRESHOLD_DEFAULT,
     FORECAST_LEAD_TIME_MIN_PROB,
+    FORECAST_THRESHOLD_METRIC,
+    FORECAST_THRESHOLD_GRID_STEP,
+    FORECAST_TARGET_FAR,
+    FORECAST_FBETA,
+    FORECAST_MIN_RECALL,
 )
 
 
@@ -96,13 +101,36 @@ def tune_threshold(
     y_true: np.ndarray,
     y_prob: np.ndarray,
     grid: np.ndarray | None = None,
+    metric: str = "f1",
+    beta: float | None = None,
+    target_far: float | None = None,
+    min_recall: float | None = None,
 ) -> float:
-    """Return the threshold in ``grid`` that maximises F1 on ``y_prob``.
+    """Return the threshold in ``grid`` that maximises the chosen metric.
 
-    Falls back to :data:`FORECAST_DECISION_THRESHOLD_DEFAULT` when ``y_true``
-    contains no positives (F1 is undefined).
+    Supported metrics:
+
+    * ``"f1"`` — classical F1 (default; back-compat).
+    * ``"fbeta"`` — F-beta.  ``beta > 1`` weights recall more heavily
+      (e.g. F2 for recall-oriented operations).  Uses
+      :data:`FORECAST_FBETA` if ``beta`` is ``None``.
+    * ``"youden"`` — Youden's J = TPR - FPR.  Directly rewards high
+      recall AND low false-alarm rate; scientifically defensible and
+      does NOT collapse to the trivial "always-positive" solution when
+      the class is imbalanced (unlike raw F1 with a tuned threshold).
+    * ``"far_constrained"`` — maximise recall subject to
+      ``false_alarm_rate <= target_far``.  Uses
+      :data:`FORECAST_TARGET_FAR` if ``target_far`` is ``None``.  If no
+      threshold meets the constraint, returns the one with the lowest
+      FAR (soft fallback so downstream code still gets a usable value).
+    * ``"precision_at_min_recall"`` — maximise precision subject to
+      ``recall >= min_recall``.  Uses :data:`FORECAST_MIN_RECALL` if
+      ``min_recall`` is ``None``.
+
+    Falls back to :data:`FORECAST_DECISION_THRESHOLD_DEFAULT` when
+    ``y_true`` contains no positives (all metrics become degenerate).
     """
-    from sklearn.metrics import f1_score
+    from sklearn.metrics import fbeta_score, f1_score
 
     y_true = np.asarray(y_true).astype(np.int64)
     y_prob = np.asarray(y_prob, dtype=float)
@@ -110,17 +138,108 @@ def tune_threshold(
         return FORECAST_DECISION_THRESHOLD_DEFAULT
 
     if grid is None:
-        grid = np.arange(0.05, 0.951, 0.05)
+        step = float(FORECAST_THRESHOLD_GRID_STEP)
+        grid = np.arange(step, 1.0 - step / 2.0, step)
 
-    best_thr = FORECAST_DECISION_THRESHOLD_DEFAULT
-    best_f1 = -1.0
-    for thr in grid:
-        y_pred = (y_prob >= thr).astype(np.int64)
-        f1 = f1_score(y_true, y_pred, zero_division=0)
-        if f1 > best_f1:
-            best_f1 = f1
-            best_thr = float(thr)
-    return best_thr
+    metric = str(metric).lower()
+
+    if metric == "f1":
+        best_thr = FORECAST_DECISION_THRESHOLD_DEFAULT
+        best = -1.0
+        for thr in grid:
+            y_pred = (y_prob >= thr).astype(np.int64)
+            score = f1_score(y_true, y_pred, zero_division=0)
+            if score > best:
+                best = score
+                best_thr = float(thr)
+        return best_thr
+
+    if metric == "fbeta":
+        b = float(FORECAST_FBETA if beta is None else beta)
+        best_thr = FORECAST_DECISION_THRESHOLD_DEFAULT
+        best = -1.0
+        for thr in grid:
+            y_pred = (y_prob >= thr).astype(np.int64)
+            score = fbeta_score(y_true, y_pred, beta=b, zero_division=0)
+            if score > best:
+                best = score
+                best_thr = float(thr)
+        return best_thr
+
+    n_pos = int((y_true == 1).sum())
+    n_neg = int((y_true == 0).sum())
+
+    if metric == "youden":
+        # Youden's J = TPR - FPR.  Argmax over the grid.  When the
+        # positive class dominates (long horizons), a trivially high
+        # recall paired with a saturated FPR pushes J to ~0 and any
+        # non-trivial threshold that pushes FPR down wins — which is
+        # exactly what we want for "high TPR AND low FAR".
+        best_thr = FORECAST_DECISION_THRESHOLD_DEFAULT
+        best = -1.0
+        for thr in grid:
+            y_pred = (y_prob >= thr).astype(np.int64)
+            tp = int(((y_pred == 1) & (y_true == 1)).sum())
+            fp = int(((y_pred == 1) & (y_true == 0)).sum())
+            tpr = tp / n_pos if n_pos > 0 else 0.0
+            fpr = fp / n_neg if n_neg > 0 else 0.0
+            j = tpr - fpr
+            if j > best:
+                best = j
+                best_thr = float(thr)
+        return best_thr
+
+    if metric == "far_constrained":
+        cap = float(FORECAST_TARGET_FAR if target_far is None else target_far)
+        best_thr = None
+        best_recall = -1.0
+        # Fallback: track the threshold with the lowest FAR overall.
+        fallback_thr = FORECAST_DECISION_THRESHOLD_DEFAULT
+        fallback_far = float("inf")
+        for thr in grid:
+            y_pred = (y_prob >= thr).astype(np.int64)
+            tp = int(((y_pred == 1) & (y_true == 1)).sum())
+            fp = int(((y_pred == 1) & (y_true == 0)).sum())
+            tpr = tp / n_pos if n_pos > 0 else 0.0
+            far = fp / n_neg if n_neg > 0 else 0.0
+            if far < fallback_far:
+                fallback_far = far
+                fallback_thr = float(thr)
+            if far <= cap and tpr > best_recall:
+                best_recall = tpr
+                best_thr = float(thr)
+        return best_thr if best_thr is not None else fallback_thr
+
+    if metric == "precision_at_min_recall":
+        floor = float(FORECAST_MIN_RECALL if min_recall is None else min_recall)
+        best_thr = None
+        best_precision = -1.0
+        fallback_thr = FORECAST_DECISION_THRESHOLD_DEFAULT
+        fallback_recall = -1.0
+        for thr in grid:
+            y_pred = (y_prob >= thr).astype(np.int64)
+            tp = int(((y_pred == 1) & (y_true == 1)).sum())
+            fp = int(((y_pred == 1) & (y_true == 0)).sum())
+            recall = tp / n_pos if n_pos > 0 else 0.0
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            if recall > fallback_recall:
+                fallback_recall = recall
+                fallback_thr = float(thr)
+            if recall >= floor and precision > best_precision:
+                best_precision = precision
+                best_thr = float(thr)
+        return best_thr if best_thr is not None else fallback_thr
+
+    raise ValueError(f"Unknown threshold metric: {metric!r}")
+
+
+def tune_threshold_default(y_true: np.ndarray, y_prob: np.ndarray) -> float:
+    """Tune using the metric configured in :data:`FORECAST_THRESHOLD_METRIC`.
+
+    Thin wrapper so callers get the configured strategy without having
+    to pass the metric name explicitly.
+    """
+    return tune_threshold(y_true, y_prob, metric=FORECAST_THRESHOLD_METRIC)
 
 
 # ── Lead time ──────────────────────────────────────────────────────────────

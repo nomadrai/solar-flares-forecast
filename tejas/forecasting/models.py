@@ -18,14 +18,30 @@ from tejas.config import (
     FORECAST_LOGREG_PARAMS,
     FORECAST_XGB_PARAMS,
     FORECAST_LGBM_PARAMS,
+    FORECAST_USE_SQRT_SPW,
+    FORECAST_SPW_CAP,
 )
 
 
 ALGORITHMS = ("logreg", "xgb", "lgbm")
 
 
-def compute_scale_pos_weight(y: np.ndarray) -> float:
-    """Return ``n_neg / n_pos`` for imbalanced binary training.
+def compute_scale_pos_weight(
+    y: np.ndarray,
+    use_sqrt: bool = False,
+    cap: float | None = None,
+) -> float:
+    """Return an imbalance-aware weight for the positive class.
+
+    Args:
+        y: Binary label array.
+        use_sqrt: When True, return ``sqrt(n_neg / n_pos)`` instead of
+            the raw ratio.  The sqrt tempering keeps probability
+            calibration reasonable while still up-weighting the minority
+            class.  Recommended for gradient-boosted trees.
+        cap: Optional upper bound on the returned weight.  Prevents the
+            fit from collapsing to trivially positive predictions when
+            the fold-level imbalance is extreme.
 
     Falls back to 1.0 when there are no positives (edge case for a val
     fold that happens to contain no flares within the horizon).
@@ -35,7 +51,19 @@ def compute_scale_pos_weight(y: np.ndarray) -> float:
     n_neg = int((y == 0).sum())
     if n_pos == 0:
         return 1.0
-    return n_neg / n_pos
+    ratio = n_neg / n_pos
+    if use_sqrt:
+        # sqrt only "tempers" majority-imbalance (ratio >= 1).  When the
+        # positive class dominates (long horizons), ratio < 1 and we
+        # want the mild downweighting to survive — take sqrt of the
+        # reciprocal and invert to keep the direction of the pull.
+        if ratio >= 1.0:
+            ratio = float(np.sqrt(ratio))
+        else:
+            ratio = float(1.0 / np.sqrt(1.0 / ratio))
+    if cap is not None and ratio > cap:
+        ratio = float(cap)
+    return float(ratio)
 
 
 # ── Factories ──────────────────────────────────────────────────────────────
@@ -103,9 +131,25 @@ def make_model(algorithm: str, y_train: np.ndarray | None = None):
     if algorithm == "logreg":
         return make_logreg()
     if algorithm == "xgb":
-        spw = compute_scale_pos_weight(y_train) if y_train is not None else 1.0
+        spw = (
+            compute_scale_pos_weight(
+                y_train,
+                use_sqrt=FORECAST_USE_SQRT_SPW,
+                cap=FORECAST_SPW_CAP,
+            )
+            if y_train is not None
+            else 1.0
+        )
         return make_xgb(scale_pos_weight=spw)
     if algorithm == "lgbm":
-        spw = compute_scale_pos_weight(y_train) if y_train is not None else 1.0
+        spw = (
+            compute_scale_pos_weight(
+                y_train,
+                use_sqrt=FORECAST_USE_SQRT_SPW,
+                cap=FORECAST_SPW_CAP,
+            )
+            if y_train is not None
+            else 1.0
+        )
         return make_lgbm(scale_pos_weight=spw)
     raise ValueError(f"Unknown algorithm: {algorithm}")
