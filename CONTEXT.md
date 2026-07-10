@@ -36,6 +36,8 @@ Detect flare states (start, peak, end, active state) independently in both soft 
 ### 6. Flare Classification Module
 Classify detected solar flare events into standard categories (e.g., A, B, C, M, X-class) based on their peak flux.
 
+> **Reference:** `classification_catalog.md` is the complete reference for the classification columns and GOES calibration methodology used by this module.
+
 ### 7. Forecasting Module
 Predict the probability of a flare occurring within multiple future time windows (e.g., next 5, 15, 30 mins) strictly using historical context available at the prediction time.
 
