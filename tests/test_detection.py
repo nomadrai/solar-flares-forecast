@@ -9,6 +9,7 @@ Run with: pytest tests/test_detection.py -v
 
 import numpy as np
 import pandas as pd
+# pyrefly: ignore [missing-import]
 import pytest
 from pathlib import Path
 
