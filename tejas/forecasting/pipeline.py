@@ -223,6 +223,86 @@ def train_all_horizons(
     return metrics
 
 
+# ── Fix 4: Significant-flare training ──────────────────────────────────────
+
+
+def train_significant_flare_models(
+    cadence_s: int | None = None,
+    training_frame: pd.DataFrame | None = None,
+    algorithms: Iterable[str] | None = None,
+    output_dir: Path | None = None,
+    models_dir: Path | None = None,
+    verbose: bool = True,
+) -> pd.DataFrame:
+    """Fit class-specific (moderate/strong/severe) models per horizon.
+
+    Uses ``label_sig_flare_within_{h}m`` as the target.  Artifacts are
+    written as ``{algo}_sig_horizon_{h}m.joblib``.  A separate metrics
+    file ``metrics_summary_sig.csv`` is written next to the standard
+    ``metrics_summary.csv``.
+    """
+    if cadence_s is None:
+        cadence_s = FORECAST_CADENCE_S
+    output_dir = Path(output_dir) if output_dir else Path(FORECAST_DIR)
+    models_dir = Path(models_dir) if models_dir else Path(MODELS_DIR)
+
+    if training_frame is None:
+        path = output_dir / f"training_frame_{cadence_s}s.parquet"
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Training frame not found: {path}. "
+                f"Run prepare_training_frame first."
+            )
+        training_frame = pd.read_parquet(path)
+
+    # Check that sig-flare labels exist
+    required = [f"label_sig_flare_within_{h}m"
+                for h in FORECAST_LABEL_HORIZONS_MIN]
+    missing = [c for c in required if c not in training_frame.columns]
+    if missing:
+        raise RuntimeError(
+            "Significant-flare labels missing from training frame: "
+            f"{missing}.  Run scripts/run_sig_labels.py --all first, then "
+            f"re-run scripts/run_forecasting.py --prepare."
+        )
+
+    feature_cols = select_feature_columns(training_frame)
+    split_labels = assign_split(training_frame)
+    training_frame, split_labels = apply_purge(training_frame, split_labels)
+
+    if verbose:
+        cnt = split_labels.value_counts()
+        pos = {
+            h: int(training_frame[f"label_sig_flare_within_{h}m"].sum())
+            for h in FORECAST_LABEL_HORIZONS_MIN
+        }
+        print(
+            f"  Sig-flare split sizes: train={int(cnt.get('train', 0)):,}  "
+            f"val={int(cnt.get('val', 0)):,}  test={int(cnt.get('test', 0)):,}"
+        )
+        print(f"  Sig-flare positives per horizon (total): {pos}")
+
+    metrics = train_all(
+        training_frame,
+        feature_cols,
+        split_labels,
+        algorithms=algorithms,
+        models_dir=models_dir,
+        save=True,
+        verbose=verbose,
+        label_prefix="label_sig_flare_within",
+        artifact_suffix="_sig",
+    )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    metrics_path = output_dir / "metrics_summary_sig.csv"
+    metrics.to_csv(metrics_path, index=False)
+    if verbose:
+        print(f"  Saved: {metrics_path}")
+
+    return metrics
+
+
 # ── Evaluation ─────────────────────────────────────────────────────────────
 
 

@@ -39,15 +39,20 @@ _SOURCE_SIGNALS = [
         "fallbacks": ["solexs_counts_clean", "solexs_counts"],
     },
     {
+        # Fix 6: prefer Kalman-filtered CdTe (STAT_ERR-aware, fully causal).
         "name": "cdte",
-        "preferred": "cdte_count_rate_smooth",
-        "fallbacks": ["cdte_count_rate_clean", "cdte_count_rate"],
+        "preferred": "cdte_count_rate_kalman",
+        "fallbacks": ["cdte_count_rate_smooth", "cdte_count_rate_clean",
+                       "cdte_count_rate"],
     },
     {
+        # CZT: net_rate (background-subtracted) is still the physically
+        # cleanest input for temporal derivatives; Kalman is exposed as a
+        # secondary fallback / feature input.
         "name": "czt",
         "preferred": "czt_net_rate",
-        "fallbacks": ["czt_count_rate_smooth", "czt_count_rate_clean",
-                       "czt_count_rate"],
+        "fallbacks": ["czt_count_rate_kalman", "czt_count_rate_smooth",
+                       "czt_count_rate_clean", "czt_count_rate"],
     },
 ]
 

@@ -53,6 +53,7 @@ def train_one_horizon(
     split_labels: pd.Series,
     horizon_min: int,
     algorithm: str,
+    label_prefix: str = "label_flare_within",
 ) -> dict:
     """Train one model for one horizon and return a summary dict.
 
@@ -62,6 +63,8 @@ def train_one_horizon(
         split_labels: Row-wise split membership.
         horizon_min: One of 5, 15, 30, 60.
         algorithm: One of ``logreg``, ``xgb``, ``lgbm``.
+        label_prefix: Prefix of the label column
+            (``label_flare_within`` or ``label_sig_flare_within``).
 
     Returns:
         Dict with keys ``algorithm``, ``horizon_min``, ``model``,
@@ -69,7 +72,7 @@ def train_one_horizon(
         ``test_metrics``, ``n_train``, ``n_val``, ``n_test``,
         ``n_positive_train``, ``scale_pos_weight``, ``training_seconds``.
     """
-    label_col = f"label_flare_within_{horizon_min}m"
+    label_col = f"{label_prefix}_{horizon_min}m"
     arrays = build_split_arrays(df, feature_cols, label_col, split_labels)
 
     X_tr, y_tr = arrays["X_train"], arrays["y_train"]
@@ -269,6 +272,8 @@ def train_all(
     models_dir: Path | None = None,
     save: bool = True,
     verbose: bool = True,
+    label_prefix: str = "label_flare_within",
+    artifact_suffix: str = "",
 ) -> pd.DataFrame:
     """Fit every (horizon, algorithm) combo and persist the artifacts.
 
@@ -302,9 +307,12 @@ def train_all(
     for algo in algorithms:
         for h in horizons:
             if verbose:
-                print(f"  Training {algo} horizon={h}m ...", flush=True)
+                print(f"  Training {algo}{artifact_suffix} horizon={h}m ...", flush=True)
             try:
-                result = train_one_horizon(df, feature_cols, split_labels, h, algo)
+                result = train_one_horizon(
+                    df, feature_cols, split_labels, h, algo,
+                    label_prefix=label_prefix,
+                )
             except ValueError as exc:
                 # Most commonly: the horizon's positive class is absent
                 # from the train fold, so LogReg/XGBoost refuse to fit.
@@ -325,7 +333,7 @@ def train_all(
             if save:
                 import joblib
 
-                artifact_path = models_dir / f"{algo}_horizon_{h}m.joblib"
+                artifact_path = models_dir / f"{algo}{artifact_suffix}_horizon_{h}m.joblib"
                 joblib.dump(
                     {
                         "model": result["model"],

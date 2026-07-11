@@ -22,6 +22,7 @@ from tejas.processing.spike_removal import remove_spikes_day
 from tejas.processing.smoothing import smooth_day
 from tejas.processing.czt_background import subtract_czt_background
 from tejas.processing.normalization import normalize_day
+from tejas.processing.kalman import smooth_day_kalman   # Fix 6
 
 
 # ── Single Day Pipeline ────────────────────────────────────────────────────
@@ -106,6 +107,33 @@ def process_day(date_str, input_dir=None, output_dir=None, save=True):
     df = norm_result["df"]
     norm_report = norm_result["report"]
     print(f"    Added {norm_report['n_columns']} normalization columns")
+
+    # ── Step 5 (Fix 6): Kalman smoothing (adds *_kalman alongside *_smooth) ─
+    print(f"  [5/6] Kalman filtering (CdTe & CZT)...")
+    kalman_result = smooth_day_kalman(df)
+    df = kalman_result["df"]
+    print(f"    Added {len(kalman_result['columns_added'])} Kalman columns: "
+          f"{kalman_result['columns_added']}")
+
+    # ── Step 6 (Fix 3): tag GTI boundaries for downstream particle disc. ────
+    # We use segment_id transitions as proxies for GTI boundaries — the
+    # ingestion module segments the data at every non-trivial data gap
+    # (≥ GAP_MEDIUM_S), which matches the physical meaning of a new GTI
+    # interval starting.
+    print(f"  [6/6] Tagging GTI boundaries (gti_start)...")
+    df["gti_start"] = False
+    # Union of both HEL1OS segment transitions and any long time-jump.
+    if "cdte_segment_id" in df.columns:
+        seg = df["cdte_segment_id"].to_numpy()
+        # First row + every row where segment_id changes
+        transitions = np.concatenate(([True], seg[1:] != seg[:-1]))
+        df.loc[transitions, "gti_start"] = True
+    if "czt_segment_id" in df.columns:
+        seg = df["czt_segment_id"].to_numpy()
+        transitions = np.concatenate(([True], seg[1:] != seg[:-1]))
+        df.loc[transitions, "gti_start"] = True
+    n_gti_starts = int(df["gti_start"].sum())
+    print(f"    Marked {n_gti_starts} GTI-start rows")
 
     # ── Summary ───────────────────────────────────────────────────────
     n_cols_final = len(df.columns)

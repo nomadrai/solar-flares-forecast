@@ -281,6 +281,11 @@ FORECAST_DROP_COLUMNS = {
     "label_minutes_to_next_flare",
     "label_flare_within_5m", "label_flare_within_15m",
     "label_flare_within_30m", "label_flare_within_60m",
+    # Fix 4: significant-flare labels
+    "label_sig_flare_within_5m", "label_sig_flare_within_15m",
+    "label_sig_flare_within_30m", "label_sig_flare_within_60m",
+    # Metadata
+    "gti_start",
 }
 
 # Rolling-window features produce NaN for the first N-1 samples of each
@@ -351,13 +356,53 @@ FORECAST_CALIBRATION_METHOD = "isotonic"
 #   ``"far_constrained"`` — max recall subject to FAR <= FORECAST_TARGET_FAR.
 #   ``"precision_at_min_recall"`` — max precision subject to recall >=
 #                                    FORECAST_MIN_RECALL.
-FORECAST_THRESHOLD_METRIC = "youden"
+FORECAST_THRESHOLD_METRIC = "far_constrained"   # Fix 1: FAR-constrained default
 FORECAST_THRESHOLD_GRID_STEP = 0.01     # finer grid than the legacy 0.05
 FORECAST_FBETA = 2.0                    # only used when metric == "fbeta"
-FORECAST_TARGET_FAR = 0.15              # only used when metric == "far_constrained"
+FORECAST_TARGET_FAR = 0.10              # Fix 1: 10% FAR ceiling
 FORECAST_MIN_RECALL = 0.85              # only used when metric == "precision_at_min_recall"
 
 # DECISION_THRESHOLD_DEFAULT is only used if val-based tuning fails
 # (e.g., zero positives in val fold).
 FORECAST_DECISION_THRESHOLD_DEFAULT = 0.5
 FORECAST_LEAD_TIME_MIN_PROB = 0.5     # first ts with p >= this counts as lead
+
+
+# ── Fix 6: Kalman Filter Smoothing (Phase 3 augmentation) ──────────────────
+# Kalman columns are added alongside the existing *_smooth columns.
+# Feature engineering prefers *_kalman as highest-priority variant.
+KALMAN_Q_CZT     = 0.5    # CZT process noise (small = more smoothing)
+KALMAN_Q_CDTE    = 2.0    # CdTe process noise (allows faster flare tracking)
+KALMAN_R_DEFAULT = 5.0    # Default measurement noise std when STAT_ERR unavailable
+
+
+# ── Fix 3: Particle / SEP Discriminator Features (Phase 4 augmentation) ───
+PARTICLE_RATIO_WINDOW_S         = 600   # trailing window for CZT/CdTe ratio z-score
+PARTICLE_RATIO_SPIKE_THRESHOLD  = 3.0   # sigma threshold for ratio anomaly
+PARTICLE_GTI_PROXIMITY_WINDOW_S = 120   # seconds within which to flag GTI proximity
+
+
+# ── Fix 7: AR-Proxy Feature Windows (post-Phase-5 augmentation) ───────────
+AR_PROXY_SHORT_WINDOW_H = 6    # hours for short-window flare count
+AR_PROXY_LONG_WINDOW_H  = 12   # hours for long-window flare count
+
+
+# ── Fix 4: Significant-Flare Class-Specific Model ─────────────────────────
+# Phase 6 provides `intensity_class` (native TEJAS bins) since GOES calibration
+# was not run.  We treat moderate/strong/severe events as "significant" — this
+# gives ~43 events across the May 2026 catalogue.  GOES calibration would
+# populate `goes_class`, in which case the plan document recommends switching
+# to `["M", "X"]`.
+FORECAST_SIGNIFICANT_INTENSITY_CLASSES = ["moderate", "strong", "severe"]
+FORECAST_LABEL_HORIZONS_MIN_SIG        = [5, 15, 30, 60]
+
+
+# ── Fix 8: Two-Stage False Alert Discriminator ────────────────────────────
+DISCRIMINATOR_WINDOW_S      = 1800   # 30-minute trailing context window (seconds)
+DISCRIMINATOR_SUMMARY_STATS = ["mean", "std", "min", "max", "slope"]
+
+
+# ── Phase 8: Alert Engine (Fix 2 — confirmation gate) ─────────────────────
+ALERT_CONFIRMATION_K = 3     # consecutive windows before confirming
+ALERT_COOLDOWN_S     = 300   # post-alert suppression window (seconds)
+ALERT_CADENCE_S      = FORECAST_CADENCE_S   # inherit from forecast cadence

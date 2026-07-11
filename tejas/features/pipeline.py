@@ -22,6 +22,9 @@ from tejas.features.temporal import compute_temporal_features
 from tejas.features.spectral import compute_spectral_features
 from tejas.features.cross_instrument import compute_cross_instrument_features
 from tejas.features.statistical import compute_statistical_features
+from tejas.features.particle_discriminator import (
+    compute_particle_discriminator_features,   # Fix 3
+)
 
 
 # ── Single Day Pipeline ────────────────────────────────────────────────────
@@ -98,11 +101,18 @@ def engineer_day(date_str, input_dir=None, output_dir=None, save=True):
     print(f"    Added {n_cross} cross-instrument features")
 
     # ── Step 4: Statistical features ───────────────────────────────────
-    print(f"  [4/4] Statistical features...")
+    print(f"  [4/5] Statistical features...")
     stat_result = compute_statistical_features(df)
     df = stat_result["df"]
     n_stat = len(stat_result["columns_added"])
     print(f"    Added {n_stat} statistical features")
+
+    # ── Step 5 (Fix 3): Particle / SEP discriminator features ──────────
+    print(f"  [5/5] Particle discriminator features...")
+    particle_result = compute_particle_discriminator_features(df)
+    df = particle_result["df"]
+    n_particle = len(particle_result["columns_added"])
+    print(f"    Added {n_particle} particle discriminator features")
 
     # ── Summary ────────────────────────────────────────────────────────
     n_cols_final = len(df.columns)
@@ -131,6 +141,7 @@ def engineer_day(date_str, input_dir=None, output_dir=None, save=True):
         "n_spectral": n_spectral,
         "n_cross_instrument": n_cross,
         "n_statistical": n_stat,
+        "n_particle": n_particle,
         "elapsed_s": round(elapsed, 1),
     }
 

@@ -51,6 +51,7 @@ from tejas.forecasting.models import ALGORITHMS
 from tejas.forecasting.pipeline import (
     prepare_training_frame,
     train_all_horizons,
+    train_significant_flare_models,
     evaluate_all,
 )
 
@@ -91,9 +92,25 @@ def main() -> int:
         choices=["all", *ALGORITHMS],
         help="Algorithm to train (default: all).",
     )
+    parser.add_argument(
+        "--sig", action="store_true",
+        help="Fix 4: also train significant-flare (moderate/strong/severe) "
+             "class-specific models per horizon.",
+    )
+    parser.add_argument(
+        "--stack", action="store_true",
+        help="Fix 5: train stacking meta-learner over LogReg + XGB + LGBM.",
+    )
+    parser.add_argument(
+        "--discriminator", action="store_true",
+        help="Fix 8: train Stage-2 false-alert discriminator.",
+    )
     args = parser.parse_args()
 
-    if not (args.prepare or args.train or args.evaluate or args.all):
+    if not (
+        args.prepare or args.train or args.evaluate or args.all
+        or args.sig or args.stack or args.discriminator
+    ):
         parser.print_help()
         return 0
 
@@ -128,6 +145,70 @@ def main() -> int:
         eval_algo = args.algorithm if args.algorithm != "all" else "xgb"
         evaluate_all(cadence_s=args.cadence, algorithm=eval_algo)
         print(f"\nReports written to: {FORECAST_DIR}")
+
+    # ── Fix 4 ── Significant-flare class-specific models
+    if args.sig:
+        _banner(f"Phase 7 · train significant-flare models (cadence={args.cadence}s)")
+        try:
+            sig_summary = train_significant_flare_models(
+                cadence_s=args.cadence,
+                algorithms=algorithms,
+            )
+            if len(sig_summary):
+                print("\n=== SIG-FLARE TRAINING SUMMARY ===\n")
+                cols = [
+                    "algorithm", "horizon_min", "n_train", "n_val", "n_test",
+                    "n_positive_train", "decision_threshold",
+                    "val_pr_auc", "val_recall", "val_false_alarm_rate",
+                    "test_pr_auc", "test_recall", "test_false_alarm_rate",
+                ]
+                cols_present = [c for c in cols if c in sig_summary.columns]
+                print(sig_summary[cols_present].to_string(index=False))
+            else:
+                print("[NOTE] No sig-flare models produced (likely no positives).")
+        except (FileNotFoundError, RuntimeError) as exc:
+            print(f"[ERROR] Sig-flare training failed: {exc}")
+
+    # ── Fix 5 ── Stacked ensemble
+    if args.stack:
+        _banner(f"Phase 7 · train stacked ensemble (cadence={args.cadence}s)")
+        from tejas.forecasting.ensemble import train_stacked_ensemble
+        try:
+            stack_summary = train_stacked_ensemble(cadence_s=args.cadence)
+            if len(stack_summary):
+                print("\n=== STACKED ENSEMBLE SUMMARY ===\n")
+                cols = [
+                    "algorithm", "horizon_min", "decision_threshold",
+                    "val_pr_auc", "test_pr_auc",
+                    "test_recall", "test_false_alarm_rate",
+                ]
+                cols_present = [c for c in cols if c in stack_summary.columns]
+                print(stack_summary[cols_present].to_string(index=False))
+        except (FileNotFoundError, RuntimeError) as exc:
+            print(f"[ERROR] Stacked ensemble training failed: {exc}")
+
+    # ── Fix 8 ── Two-stage discriminator
+    if args.discriminator:
+        _banner(f"Phase 7 · train false-alert discriminator (cadence={args.cadence}s)")
+        from tejas.forecasting.discriminator import train_discriminator
+        eval_algo = args.algorithm if args.algorithm != "all" else "xgb"
+        try:
+            disc_summary = train_discriminator(
+                cadence_s=args.cadence,
+                base_algorithm=eval_algo,
+            )
+            if len(disc_summary):
+                print("\n=== DISCRIMINATOR SUMMARY ===\n")
+                cols = [
+                    "horizon_min", "n_test_candidates",
+                    "n_test_true_alerts", "n_test_false_alerts",
+                    "n_test_suppressed", "n_test_wrongly_suppressed",
+                    "test_recall_after_gate", "test_precision_after_gate",
+                ]
+                cols_present = [c for c in cols if c in disc_summary.columns]
+                print(disc_summary[cols_present].to_string(index=False))
+        except (FileNotFoundError, RuntimeError) as exc:
+            print(f"[ERROR] Discriminator training failed: {exc}")
 
     print(f"\nModel artifacts: {MODELS_DIR}")
     return 0
