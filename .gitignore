@@ -3,6 +3,10 @@
 # Data files (too large for git)
 data/
 
+# GOES netCDF cache / temp files
+data/goes_cache/
+*.nc
+
 # Python
 __pycache__/
 *.pyc

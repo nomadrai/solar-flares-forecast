@@ -72,16 +72,24 @@ def _open_dataset(content):
     try:
         return xr.open_dataset(io.BytesIO(content), engine="h5netcdf")
     except Exception:
+        import os
         import tempfile
+        cache_dir = project_root / "data" / "goes_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(suffix=".nc", delete=False,
-                                         dir=str(project_root)) as tmp:
+                                         dir=str(cache_dir)) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
         try:
-            return xr.open_dataset(tmp_path, engine="netcdf4")
+            return xr.open_dataset(tmp_path, engine="netcdf4").load()
         except Exception as e:
             print(f"  [WARN] failed to parse netCDF: {e}")
             return None
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 def parse_flsum(ds):
