@@ -108,11 +108,19 @@ def engineer_day(date_str, input_dir=None, output_dir=None, save=True):
     print(f"    Added {n_stat} statistical features")
 
     # ── Step 5 (Fix 3): Particle / SEP discriminator features ──────────
-    print(f"  [5/5] Particle discriminator features...")
+    print(f"  [5/6] Particle discriminator features...")
     particle_result = compute_particle_discriminator_features(df)
     df = particle_result["df"]
     n_particle = len(particle_result["columns_added"])
     print(f"    Added {n_particle} particle discriminator features")
+
+    # ── Step 6 (v2): Long-window context features ──────────────────────
+    print(f"  [6/6] Long-window context features...")
+    from tejas.features.long_context import compute_long_context_features
+    long_result = compute_long_context_features(df)
+    df = long_result["df"]
+    n_long = len(long_result["columns_added"])
+    print(f"    Added {n_long} long-context features")
 
     # ── Summary ────────────────────────────────────────────────────────
     n_cols_final = len(df.columns)
@@ -142,6 +150,7 @@ def engineer_day(date_str, input_dir=None, output_dir=None, save=True):
         "n_cross_instrument": n_cross,
         "n_statistical": n_stat,
         "n_particle": n_particle,
+        "n_long_context": n_long,
         "elapsed_s": round(elapsed, 1),
     }
 

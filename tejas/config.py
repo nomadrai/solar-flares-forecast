@@ -284,6 +284,10 @@ FORECAST_DROP_COLUMNS = {
     # Fix 4: significant-flare labels
     "label_sig_flare_within_5m", "label_sig_flare_within_15m",
     "label_sig_flare_within_30m", "label_sig_flare_within_60m",
+    # v2: backed-up original (all-event) labels — pure leakage if kept
+    "label_minutes_to_next_flare_all",
+    "label_flare_within_5m_all", "label_flare_within_15m_all",
+    "label_flare_within_30m_all", "label_flare_within_60m_all",
     # Metadata
     "gti_start",
 }
@@ -356,7 +360,7 @@ FORECAST_CALIBRATION_METHOD = "isotonic"
 #   ``"far_constrained"`` — max recall subject to FAR <= FORECAST_TARGET_FAR.
 #   ``"precision_at_min_recall"`` — max precision subject to recall >=
 #                                    FORECAST_MIN_RECALL.
-FORECAST_THRESHOLD_METRIC = "far_constrained"   # Fix 1: FAR-constrained default
+FORECAST_THRESHOLD_METRIC = "precision_at_min_recall"  # v2: max precision s.t. recall >= floor
 FORECAST_THRESHOLD_GRID_STEP = 0.01     # finer grid than the legacy 0.05
 FORECAST_FBETA = 2.0                    # only used when metric == "fbeta"
 FORECAST_TARGET_FAR = 0.10              # Fix 1: 10% FAR ceiling
@@ -398,8 +402,69 @@ FORECAST_LABEL_HORIZONS_MIN_SIG        = [5, 15, 30, 60]
 
 
 # ── Fix 8: Two-Stage False Alert Discriminator ────────────────────────────
-DISCRIMINATOR_WINDOW_S      = 1800   # 30-minute trailing context window (seconds)
-DISCRIMINATOR_SUMMARY_STATS = ["mean", "std", "min", "max", "slope"]
+DISCRIMINATOR_WINDOW_S       = 1800   # 30-minute trailing context window (seconds)
+DISCRIMINATOR_SUMMARY_STATS  = ["mean", "std", "min", "max", "slope"]
+DISCRIMINATOR_TOP_K_BASE     = 30     # top-K feature-importance columns to summarise
+DISCRIMINATOR_TP_LOSS_WEIGHT  = 1.2    # cost of killing a true alert relative to
+                                        # killing a false one (used for net-benefit
+                                        # net gain check when SKIPPING a horizon).
+DISCRIMINATOR_MIN_NET_BENEFIT = 3     # skip the horizon if val net-benefit
+                                       # (correct_kills − α × wrong_kills) < this.
+DISCRIMINATOR_MIN_PRECISION   = 0.60   # minimum val precision on suppressed
+                                        # alerts (correctly_killed /
+                                        # total_killed).  Above this floor
+                                        # every kill lifts precision.
+DISCRIMINATOR_MAX_TP_KILL_RATE = 0.10  # fraction of Stage-1 true positives we
+                                        # allow the discriminator to
+                                        # inadvertently kill.  0.10 recovers
+                                        # the original behaviour that got
+                                        # 249 FPs killed / 0 TPs killed at
+                                        # 30 min.  Tightening this (0.05 or
+                                        # 0.03) trades away some of that
+                                        # aggressive-but-lucky behaviour for
+                                        # more conservative suppression.
+
+
+# ── v2 Optimization: Precision + Recall (credible-event relabelling) ──────
+# The original forecasting labels were built from ALL 1,751 catalogue events,
+# ~86% of which are hard-only noise blips or sub-noise-floor "faint" events.
+# Training and evaluating on those caps discrimination near random.  v2
+# rebuilds the forecasting targets from a *credible* subset and confirms
+# events against the external GOES flare list.
+
+# A TEJAS event is "credible" if it has a soft (SoLEXS) detection with peak
+# count rate at or above this floor (the "weak" intensity bin edge), OR it
+# cross-matches a GOES flare (see GOES_VALIDATION_* below).  Hard-only events
+# are excluded from the forecasting targets (they remain in the catalogue and
+# still feed the AR-proxy activity-context features).
+FORECAST_EVENT_MIN_PEAK_COUNTS = 25      # c/s; == INTENSITY_BIN_EDGES[0]
+FORECAST_EVENT_REQUIRE_SOFT    = True    # drop hard-only events from targets
+CREDIBLE_CATALOGUE_NAME        = "master_catalogue_credible.csv"
+
+# GOES cross-match (external confirmation) — tejas/validation/goes_match.py.
+# Wider than the ±30 s calibration tolerance because GOES flare *begin/peak*
+# timing and TEJAS peak timing differ by minutes for gradual events.
+GOES_VALIDATION_TOLERANCE_S = 300        # ±5 min peak-to-peak match window
+GOES_FLARE_LIST_NAME        = "goes_flare_events.csv"
+GOES_VALIDATION_REPORT      = PROJECT_DIR / "goes_validation_report.md"
+
+# v2 threshold objective: maximise precision subject to a per-horizon recall
+# floor (the user's "recall ≥ 0.8, then best precision" goal).  Overrides the
+# scalar FORECAST_MIN_RECALL when FORECAST_THRESHOLD_METRIC ==
+# "precision_at_min_recall".  A horizon absent here falls back to
+# FORECAST_MIN_RECALL.
+FORECAST_MIN_RECALL_PER_HORIZON = {5: 0.80, 15: 0.80, 30: 0.80, 60: 0.80}
+
+# Event-level evaluation (tejas/forecasting/event_metrics.py).  Consecutive
+# alert rows within this gap are merged into one alert "episode" for
+# episode-precision accounting.
+EVENT_ALERT_MERGE_GAP_S = 300            # merge alerts < 5 min apart
+
+# Long-window context features (tejas/features/long_context.py).  Hour-scale
+# quiet-vs-active context; the longest pre-v2 trailing window was only 600 s.
+LONG_CONTEXT_PCTRANK_WINDOWS_S = [3600, 10800, 21600]   # 1 h, 3 h, 6 h
+LONG_CONTEXT_RISE_WINDOW_S     = 300                    # rise-consistency window
+LONG_CONTEXT_MEDIAN_WINDOW_S   = 3600                   # elevated-state baseline
 
 
 # ── Phase 8: Alert Engine (Fix 2 — confirmation gate) ─────────────────────

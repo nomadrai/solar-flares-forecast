@@ -225,7 +225,10 @@ def tune_threshold(
             if recall > fallback_recall:
                 fallback_recall = recall
                 fallback_thr = float(thr)
-            if recall >= floor and precision > best_precision:
+            # ``>=`` so precision ties resolve to the HIGHEST threshold —
+            # same precision with fewer fired alerts.  Strict ``>`` made a
+            # flat precision curve collapse to the always-fire threshold.
+            if recall >= floor and precision >= best_precision:
                 best_precision = precision
                 best_thr = float(thr)
         return best_thr if best_thr is not None else fallback_thr

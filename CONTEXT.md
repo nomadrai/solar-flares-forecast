@@ -3,6 +3,23 @@
 ## Agent Guidelines
 **⚠ IMPORTANT:** Do not make any changes until you have 95% confidence in what you need to build. Ask me follow-up questions until you reach that confidence.
 
+**⚠ Keep the docs in sync:** `CONTEXT.md` (this file) and `data_used.md` are living documents. **They must be updated on every major project update** — a completed phase, a new module/data source, a changed file format or directory layout, or a new reference/optimization document. Treat a stale doc as a defect and update it in the same change that caused the drift. See *Document Maintenance* at the end of this file.
+
+## Project Status (as of the latest update)
+| Phase | Module | Status |
+|---|---|---|
+| 1 | Exploratory Data Analysis | ✅ Complete (`outputs/eda/`) |
+| 2 | Data Ingestion | ✅ Complete (`tejas/ingestion/`, `tejas/loaders/`) |
+| 3 | Data Processing (incl. Kalman smoothing, CZT background) | ✅ Complete (`tejas/processing/`) |
+| 4 | Feature Engineering (81 features + SEP/AR-proxy/long-context) | ✅ Complete (`tejas/features/`) |
+| 5 | Flare Detection / Nowcasting | ✅ Complete (`tejas/detection/`) |
+| 6 | Flare Classification (native + GOES calibration) | ✅ Complete (`tejas/classification/`) |
+| 7 | Forecasting (multi-horizon, +v2 optimization) | ✅ Complete (`tejas/forecasting/`) |
+| 8 | Alert Engine (confirmation gate + cooldown) | ✅ Implemented (`tejas/alerts/confirmation.py`) |
+| 9–11 | Explainability, Catalogue DB, Dashboard | ◻ Pending |
+
+**Optimization track:** A precision/recall optimization effort is documented in `optimization_plan.md`, `optimization_plan_v2.md`, and `optimization_report.md`. The v2 stage rebuilds forecasting targets from a *credible* event subset (soft-detected or GOES-confirmed) — see `tejas/detection/credible.py`, `tejas/features/long_context.py`, and the v2 config block in `tejas/config.py`. External detection recall vs GOES truth is tracked in `goes_validation_report.md`.
+
 ## Project Overview
 TEJAS is an AI-powered solar flare nowcasting and forecasting platform using combined SoLEXS (Soft X-ray) and HEL1OS (Hard X-ray) observations from the Aditya-L1 mission.
 **Goals:** Detect flares (nowcasting), forecast probabilities, auto-generate flare catalogues, provide explainable alerts, and visualize activity via an operational dashboard.
@@ -34,7 +51,7 @@ Generate physically meaningful features (e.g., rolling averages, flux gradients,
 Detect flare states (start, peak, end, active state) independently in both soft and hard X-rays, combining them to generate a master real-time flare catalogue.
 
 ### 6. Flare Classification Module
-Classify detected solar flare events into standard categories (e.g., A, B, C, M, X-class) based on their peak flux.
+Classify detected solar flare events into standard categories (e.g., A, B, C, M, X-class) based on their peak flux. TEJAS assigns a **native intensity class** (faint/weak/moderate/strong/severe) directly from SoLEXS peak counts, and — when optional GOES XRS data is present — an empirically calibrated **GOES-equivalent letter class** via `data/reference/calibration/solexs_to_goes.json`.
 
 > **Reference:** `classification_catalog.md` is the complete reference for the classification columns and GOES calibration methodology used by this module.
 
@@ -69,6 +86,11 @@ Provide operational visibility through live monitoring panels, forecasting and d
 *   **Data characteristics:** 1-second cadence. ~85-88% of bins have zero counts outside flares.
 *   **Good Time Interval (`gti*.fits`):** Intervals span the entire dump for Level-1 data.
 
+### External Reference: NOAA GOES (optional ground truth)
+*   **Source:** NOAA NCEI archive. Stored under `data/reference/goes/YYYY/MM/`. Fetched by `scripts/fetch_goes_data.py` (XRS 1s flux CSVs) and `scripts/fetch_goes_flares.py` (`goes_flare_events.csv`).
+*   **Role:** Empirical SoLEXS-count → GOES-flux calibration (Phase 6) and independent confirmation of TEJAS detections (v2 forecasting). Fully optional — the core pipeline runs without it.
+*   **Reference:** `data_used.md` describes both GOES products in detail.
+
 ## Unique Selling Propositions (USPs)
 
 ### 1. Explainable AI for Solar Flares
@@ -81,10 +103,12 @@ The platform behaves like a real space-weather center by predicting flare probab
 TEJAS maintains a historical database and can identify past flare events that resemble current conditions in real time. This provides operators with valuable context and scientific insight during active events.
 
 ## Technical Stack
-*   **Backend & Data:** Python, Pandas, NumPy
+*   **Backend & Data:** Python, Pandas, NumPy, Astropy (FITS), PyArrow (Parquet)
+*   **External data:** requests, xarray, netCDF4 (NOAA GOES fetch)
 *   **ML:** Scikit-learn, XGBoost, LightGBM, PyTorch (if needed)
 *   **Visualization & UI:** Plotly, Streamlit
 *   **Database:** SQLite
+*   **Testing:** pytest (`tests/`)
 
 ## Architectural Priority
 
@@ -95,3 +119,14 @@ All features must preserve scientific integrity and operational realism.
 No feature should violate the strict no-future-data-leakage requirement during inference, playback, simulation, evaluation, or deployment.
 
 Future AI agents must treat this as an inviolable constraint throughout all phases of development.
+
+## Document Maintenance
+
+`CONTEXT.md` and `data_used.md` are the two canonical living documents for this project. **Both must be updated on every major update**, including:
+
+- A pipeline phase is completed or a new module is added (update the *Project Status* table).
+- A new data source, reference artifact, or optimization document is introduced.
+- A file format, column, directory layout, or config contract changes.
+- A USP, technical-stack choice, or architectural constraint changes.
+
+The rule: whatever change causes drift, fix the affected doc **in the same change**. A stale `CONTEXT.md` or `data_used.md` is treated as a defect, not a cosmetic issue. Companion reference files (`feature_catalog.md`, `classification_catalog.md`, `forecasting_catalog.md`) follow the same principle for their respective modules.

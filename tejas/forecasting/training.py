@@ -96,8 +96,16 @@ def train_one_horizon(
     test_prob = _apply_calibrator(calibrator, test_prob_raw)
 
     # Threshold optimisation (config-selected metric — see
-    # FORECAST_THRESHOLD_METRIC).
-    threshold = tune_threshold(y_val, val_prob, metric=FORECAST_THRESHOLD_METRIC)
+    # FORECAST_THRESHOLD_METRIC).  Under "precision_at_min_recall" the
+    # recall floor may vary per horizon (FORECAST_MIN_RECALL_PER_HORIZON).
+    from tejas.config import FORECAST_MIN_RECALL_PER_HORIZON
+
+    threshold = tune_threshold(
+        y_val,
+        val_prob,
+        metric=FORECAST_THRESHOLD_METRIC,
+        min_recall=FORECAST_MIN_RECALL_PER_HORIZON.get(int(horizon_min)),
+    )
     val_metrics = compute_metrics(y_val, val_prob, threshold=threshold)
     test_metrics = compute_metrics(y_te, test_prob, threshold=threshold)
 

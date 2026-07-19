@@ -2,13 +2,28 @@
 
 This document describes every data file used in the TEJAS project, its origin, its internal structure, what is extracted or derived from it, and exactly how it contributes to the project pipeline.
 
+> **⚠ Maintenance Directive:** This file and `CONTEXT.md` are living documents. **They must be updated on every major project update** — whenever a new data source is added, a file format or column is confirmed/changed, the directory layout evolves, or a new pipeline phase produces new outputs. Keeping them in sync with the code (`tejas/`) and the data tree is mandatory; a stale reference doc is treated as a bug. See the *Document Maintenance* section at the end of this file.
+
 ---
 
-## Data Source
+## Data Sources
 
-All data is obtained from **ISRO's PRADAN portal** ([pradan.issdc.gov.in](https://pradan.issdc.gov.in/pradan/al1)), which hosts publicly available Aditya-L1 mission data. Files are downloaded in day-wise (SoLEXS) or dump-wise (HEL1OS) zip archives, unzipped locally, and organized into the `data/raw/` directory.
+### 1. Primary — Aditya-L1 (ISRO)
 
-All files are in **FITS (Flexible Image Transport System)** format, readable in Python using the `astropy.io.fits` module.
+The core science data is obtained from **ISRO's PRADAN portal** ([pradan.issdc.gov.in](https://pradan.issdc.gov.in/pradan/al1)), which hosts publicly available Aditya-L1 mission data. Files are downloaded in day-wise (SoLEXS) or dump-wise (HEL1OS) zip archives, unzipped locally, and organized into the `data/raw/` directory.
+
+All Aditya-L1 files are in **FITS (Flexible Image Transport System)** format, readable in Python using the `astropy.io.fits` module.
+
+### 2. External Reference — NOAA GOES (optional ground truth)
+
+Two **optional** NOAA GOES products are pulled from the **NCEI archive** (`https://data.ngdc.noaa.gov/platforms/solar-space-observing-satellites/goes`) as external, independently-trusted references. They are stored under `data/reference/goes/` and consumed by the classification (Phase 6) and forecasting-validation (v2) stages:
+
+| Product | Fetch script | Output | Role |
+|---|---|---|---|
+| GOES-16/18 XRS 1-second flux (1–8 Å) | `scripts/fetch_goes_data.py` | `data/reference/goes/YYYY/MM/YYYY-MM-DD.csv` | Empirical SoLEXS-count → GOES-flux calibration and GOES-equivalent flare-class labels |
+| GOES flare-summary (`xrsf-l2-flsum`) | `scripts/fetch_goes_flares.py` | `data/reference/goes/YYYY/MM/goes_flare_events.csv` | Trusted flare event list used to confirm which TEJAS detections are real solar flares |
+
+Both are **optional**: the core TEJAS pipeline runs without them (the `goes_*` columns are simply skipped). They are downloaded as netCDF and distilled to CSV. Files are read with `xarray` / `netCDF4`.
 
 ---
 
@@ -30,18 +45,30 @@ data/
 │   └── hel1os/
 │       └── 2026/
 │           └── 05/
-│               ├── 01/
-│               │   ├── lightcurve_cdte1.fits
-│               │   ├── lightcurve_cdte2.fits
-│               │   ├── lightcurve_czt1.fits
-│               │   ├── lightcurve_czt2.fits
-│               │   ├── gticdte1.fits
-│               │   ├── gticdte2.fits
-│               │   ├── gticzt1.fits
-│               │   └── gticzt2.fits
+│               ├── 01/                         ← day nests further by DUMP
+│               │   ├── dump_000009/            (~00:00 UTC dump)
+│               │   │   ├── lightcurve_cdte1.fits
+│               │   │   ├── lightcurve_cdte2.fits
+│               │   │   ├── lightcurve_czt1.fits
+│               │   │   ├── lightcurve_czt2.fits
+│               │   │   ├── gticdte1.fits
+│               │   │   ├── gticdte2.fits
+│               │   │   ├── gticzt1.fits
+│               │   │   └── gticzt2.fits
+│               │   └── dump_121027/            (~12:00 UTC dump; ~12h per dump)
+│               │       └── ...
 │               ├── 02/
 │               │   └── ...
 │               └── 31/
+├── reference/                             ← external NOAA GOES + calibration
+│   ├── goes/
+│   │   └── 2026/
+│   │       └── 05/
+│   │           ├── 2026-05-01.csv         (GOES XRS 1s flux, per day)
+│   │           ├── ...
+│   │           └── goes_flare_events.csv  (distilled GOES flare list)
+│   └── calibration/
+│       └── solexs_to_goes.json            (persisted count→flux fit)
 ├── processed/
 │   ├── unified/                          ← Phase 2 output
 │   │   └── 2026/
@@ -55,26 +82,40 @@ data/
 │               ├── 2026-05-01.parquet
 │               ├── ...
 │               └── processing_summary.csv
-└── features/                             <- Phase 4 output
+├── features/                             ← Phase 4 output
+│   └── 2026/
+│       └── 05/
+│           ├── 2026-05-01.parquet
+│           ├── ...
+│           └── feature_summary.csv
+├── detection/                            ← Phase 5 output
+│   └── 2026/
+│       └── 05/
+│           ├── 2026-05-01.parquet        (labelled features + detection columns)
+│           ├── 2026-05-01_catalogue.csv  (per-day master catalogue)
+│           ├── 2026-05-01_solexs.csv     (per-day SoLEXS independent catalogue)
+│           ├── 2026-05-01_cdte.csv       (per-day CdTe independent catalogue)
+│           ├── 2026-05-01_czt.csv        (per-day CZT independent catalogue)
+│           ├── ...
+│           ├── master_catalogue.csv      (consolidated multi-day catalogue)
+│           └── detection_summary.csv
+├── classification/                       ← Phase 6 output
+│   └── 2026/
+│       └── 05/
+│           ├── master_catalogue.csv               (catalogue + intensity/GOES class)
+│           ├── master_catalogue_credible.csv      (v2 credible-event subset)
+│           ├── master_catalogue_goes_matched.csv  (events matched to GOES flares)
+│           ├── classification_summary.csv
+│           └── calibration_report.md
+└── forecasting/                          ← Phase 7 output (training frames + eval)
     └── 2026/
         └── 05/
-            ├── 2026-05-01.parquet
-            ├── ...
-            └── feature_summary.csv
-└── detection/                            <- Phase 5 output
-    └── 2026/
-        └── 05/
-            ├── 2026-05-01.parquet        (labelled features + detection columns)
-            ├── 2026-05-01_catalogue.csv  (per-day master catalogue)
-            ├── 2026-05-01_solexs.csv     (per-day SoLEXS independent catalogue)
-            ├── 2026-05-01_cdte.csv       (per-day CdTe independent catalogue)
-            ├── 2026-05-01_czt.csv        (per-day CZT independent catalogue)
-            ├── ...
-            ├── master_catalogue.csv      (consolidated multi-day catalogue)
-            └── detection_summary.csv
+            └── ...   (per-horizon training frames, evaluation reports)
 ```
 
-All directories follow **type-first, then chronological** (`type/year/month/`). Raw data additionally nests by day. This mirrors the processing pipeline stages and scales cleanly when new months or years are added — just change `YEAR` / `MONTH` in `tejas/config.py`.
+> **Model artifacts** (trained `.joblib` models, `feature_columns.json`) are written under `outputs/models/YYYY/MM/` (git-ignored), **not** under `data/`. EDA products live under `outputs/eda/YYYY/MM/`.
+
+All directories follow **type-first, then chronological** (`type/year/month/`). Raw SoLEXS additionally nests by day; raw HEL1OS nests by **day → dump** (each dump ≈ 12 h). This mirrors the processing pipeline stages and scales cleanly when new months or years are added — just change `YEAR` / `MONTH` in `tejas/config.py`.
 
 ---
 
@@ -294,31 +335,35 @@ FITS files containing the count rate time series from the two CdTe (Cadmium Tell
 **Why two files:**
 HEL1OS has two independent CdTe detectors (CdTe1 and CdTe2), each with 0.25 cm² area. They observe the same Sun simultaneously, providing redundancy and improved statistics when combined.
 
-**Internal structure:**
-Each FITS file contains a data extension with (at minimum) the following columns:
+**Internal structure (confirmed from the loader, `tejas/loaders/hel1os.py`):**
+Each FITS file contains **multiple data extensions — one per energy band** — plus a final full-range extension. Each extension has its own time array (differing row counts). Columns per extension:
 
 | Column | Type | Description |
 |---|---|---|
-| `TIME` | float | Timestamp (format to be confirmed on first read — likely MET or Unix) |
-| `COUNT_RATE` | float | Counts per second across the CdTe energy range |
-| `STAT_ERR` | float | Statistical (Poissonian) error on the count rate |
+| `MJD` | float | Timestamp in **Modified Julian Date**. Convert to Unix: `(MJD − 40587) × 86400` |
+| `ISOT` | str | ISO-8601 UTC timestamp (redundant with MJD) |
+| `CTR` | float | Count rate (counts per second) in the extension's energy band |
+| `STAT_ERR` | float | Statistical (Poissonian) error on `CTR` |
 
-> **Important:** On first read, inspect the file with `hdul.info()` and `print(hdul[1].columns.names)` to confirm the exact extension index and column names.
+**Energy bands (extensions):** CdTe = 5–20, 20–30, 30–40, 40–60, and 1.8–90 keV (full range). The loader reads the **last extension** for the full-range light curve and all extensions for per-band features (`load_detector_bands`). GTI values (in the `gti*.fits` files) are auto-detected as MJD when their median is < 100000 and converted to Unix.
+
+> **Note:** The `TIME`/`COUNT_RATE` naming in earlier drafts of this doc was a placeholder. The real column names are `MJD` and `CTR` (verified in production loader).
 
 **How to read it:**
 ```python
 from astropy.io import fits
 import pandas as pd
+import numpy as np
+
+MJD_UNIX_EPOCH, SECONDS_PER_DAY = 40587.0, 86400.0
 
 with fits.open('lightcurve_cdte1.fits') as hdul:
-    # Inspect structure on first read:
-    # hdul.info()
-    # print(hdul[1].columns.names)
-    data = hdul[1].data
+    ext = hdul[-1]                       # last extension = full energy range
+    mjd = ext.data['MJD'].astype(np.float64)
     df = pd.DataFrame({
-        'time_unix': data['TIME'],
-        'count_rate': data['COUNT_RATE'],
-        'stat_err': data['STAT_ERR']
+        'time_unix': (mjd - MJD_UNIX_EPOCH) * SECONDS_PER_DAY,
+        'count_rate': ext.data['CTR'].astype(np.float64),
+        'stat_err': ext.data['STAT_ERR'].astype(np.float64),
     })
     df['datetime'] = pd.to_datetime(df['time_unix'], unit='s', origin='unix')
 ```
@@ -352,23 +397,20 @@ FITS files containing the count rate time series from the two CZT (Cadmium Zinc 
 HEL1OS has two pixelated CZT detectors (256 pixels each), providing a combined geometric area of 32 cm².
 
 **Internal structure:**
-Same column format as CdTe light curves:
+Same multi-extension, per-band format as CdTe light curves. Each extension exposes `MJD`, `ISOT`, `CTR`, `STAT_ERR`.
 
-| Column | Type | Description |
-|---|---|---|
-| `TIME` | float | Timestamp |
-| `COUNT_RATE` | float | Counts per second across the CZT energy range |
-| `STAT_ERR` | float | Statistical error on the count rate |
+**Energy bands (extensions):** CZT = 20–40, 40–60, 60–80, 80–150, and 18–160 keV (full range).
 
 **How to read it:**
 ```python
-# Identical to CdTe light curve reading
+# Identical to CdTe light curve reading — last extension = full range
 with fits.open('lightcurve_czt1.fits') as hdul:
-    data = hdul[1].data
+    ext = hdul[-1]
+    mjd = ext.data['MJD'].astype(np.float64)
     df = pd.DataFrame({
-        'time_unix': data['TIME'],
-        'count_rate': data['COUNT_RATE'],
-        'stat_err': data['STAT_ERR']
+        'time_unix': (mjd - 40587.0) * 86400.0,
+        'count_rate': ext.data['CTR'].astype(np.float64),
+        'stat_err': ext.data['STAT_ERR'].astype(np.float64),
     })
 ```
 
@@ -451,6 +493,30 @@ The downloaded archives contain additional files that are **not used** in TEJAS:
 
 ---
 
+## External Reference Files (NOAA GOES)
+
+These files are **not Aditya-L1 data** — they are external ground truth downloaded from NOAA NCEI and stored under `data/reference/goes/YYYY/MM/`. They are optional; the pipeline runs without them.
+
+### 8. GOES XRS Daily Flux — `YYYY-MM-DD.csv`
+
+**Origin:** GOES-16/18 XRS long-channel (1–8 Å) 1-second irradiance, fetched by `scripts/fetch_goes_data.py` from the NCEI netCDF archive and written one CSV per day.
+
+**What is derived from it:**
+- Empirical **SoLEXS-count → GOES-flux calibration** (`tejas/classification/calibration.py`), persisted as `data/reference/calibration/solexs_to_goes.json`.
+- GOES-equivalent letter classes (A/B/C/M/X) for detected events via the calibrated flux, using the standard NOAA thresholds in `config.GOES_CLASS_THRESHOLDS`.
+
+### 9. GOES Flare Event List — `goes_flare_events.csv`
+
+**Origin:** NOAA GOES flare-summary product (`xrsf-l2-flsum`), fetched by `scripts/fetch_goes_flares.py`. The raw netCDF has one row per state transition (EVENT_START / PEAK / END / POST_EVENT); the script groups by `flare_id` and emits one row per flare with begin/peak/end (UTC) and GOES class.
+
+**What is derived from it:**
+- **External confirmation** of TEJAS detections (`tejas/validation/goes_match.py`): a TEJAS event is cross-matched to a GOES flare within `GOES_VALIDATION_TOLERANCE_S` (±5 min peak-to-peak). Used to build the "credible" catalogue subset for v2 forecasting targets and to compute detection recall vs external truth (see `goes_validation_report.md`).
+
+**Contribution to TEJAS:**
+- Anchors scientific credibility — lets TEJAS report detection recall against an independent flare list (e.g., 212/259 GOES flares recovered ≈ 81.9% in the May 2026 run) and filters ~86% noise-blip events out of the forecasting training targets.
+
+---
+
 ## Summary: Data Flow Into TEJAS
 
 ```
@@ -486,7 +552,21 @@ The downloaded archives contain additional files that are **not used** in TEJAS:
 
 | Instrument | Time Format | Description |
 |---|---|---|
-| SoLEXS | Unix time | Seconds since 1970-01-01 00:00:00 UTC |
-| HEL1OS | To be confirmed on first read | Likely Unix time or Mission Elapsed Time (MET). Inspect the `TIME` column and FITS header keywords (`MJDREFI`, `TIMEZERO`, etc.) on first read. |
+| SoLEXS | Unix time | Seconds since 1970-01-01 00:00:00 UTC (`TIME` / `TSTART` columns) |
+| HEL1OS | **MJD** (Modified Julian Date) | Confirmed. Convert to Unix: `(MJD − 40587) × 86400`. Columns: `MJD` (float) and redundant `ISOT` (ISO-8601 string). GTI files also store MJD (auto-detected when median < 100000). |
+| GOES (NOAA) | ISO-8601 UTC | netCDF timestamps parsed to UTC datetimes by the fetch scripts. |
 
-Both must be converted to a common time axis (UTC datetime) during data ingestion for synchronization.
+Both instruments are converted to a common time axis (UTC datetime) during data ingestion for synchronization.
+
+---
+
+## Document Maintenance
+
+**This document must be kept in sync with the project.** Update it on **every major update**, including (but not limited to):
+
+- A new data source or instrument is added, or an existing one is dropped.
+- A file format, column name, time format, or energy band is confirmed or changed (e.g. the HEL1OS `MJD`/`CTR` confirmation above).
+- The `data/` directory layout changes, or a new pipeline phase adds new output files/folders.
+- Calibration or reference artifacts (e.g. `solexs_to_goes.json`, GOES CSVs) change in meaning or location.
+
+When you touch the data pipeline (`tejas/loaders/`, `tejas/ingestion/`, `tejas/processing/`, or any `scripts/fetch_*`/`extract_*`), review this file in the same change. A stale reference doc is treated as a defect. `CONTEXT.md` carries the same directive for the project's architecture and phases — update both together.

@@ -198,11 +198,17 @@ def train_stacked_ensemble(
         val_stack = meta.predict_proba(base_val_probs)[:, 1]
         test_stack = meta.predict_proba(base_test_probs)[:, 1]
 
-        # Threshold: FAR-constrained on val.
+        # Threshold: config-selected metric on val (v2: precision at a
+        # per-horizon recall floor; falls back to the scalar default).
+        from tejas.config import (
+            FORECAST_THRESHOLD_METRIC,
+            FORECAST_MIN_RECALL_PER_HORIZON,
+        )
         threshold = tune_threshold(
             y_val, val_stack,
-            metric="far_constrained",
+            metric=FORECAST_THRESHOLD_METRIC,
             target_far=FORECAST_TARGET_FAR,
+            min_recall=FORECAST_MIN_RECALL_PER_HORIZON.get(int(h)),
         )
         val_metrics = compute_metrics(y_val, val_stack, threshold=threshold)
         test_metrics = compute_metrics(y_test, test_stack, threshold=threshold)
