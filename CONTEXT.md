@@ -18,7 +18,7 @@
 | 8 | Alert Engine (confirmation gate + cooldown) | ✅ Implemented (`tejas/alerts/confirmation.py`) |
 | 9–11 | Explainability, Catalogue DB, Dashboard | ◻ Pending |
 
-**Optimization track:** A precision/recall optimization effort is documented in `optimization_plan.md`, `optimization_plan_v2.md`, and `optimization_report.md`. The v2 stage rebuilds forecasting targets from a *credible* event subset (soft-detected or GOES-confirmed) — see `tejas/detection/credible.py`, `tejas/features/long_context.py`, and the v2 config block in `tejas/config.py`. External detection recall vs GOES truth is tracked in `goes_validation_report.md`.
+**Optimization track:** A precision/recall optimization effort is documented in `optimization_plan.md`, `optimization_plan_v2.md`, `optimization_report.md`, and `optimization_plan_v3.md`. The v2 stage rebuilds forecasting targets from a *credible* event subset (soft-detected or GOES-confirmed) — see `tejas/detection/credible.py`, `tejas/features/long_context.py`, and the v2 config block in `tejas/config.py`. The v3 plan (measured diagnosis + 12-area coverage + P0–P8 phased roadmap) is the current implementation target. External detection recall vs GOES truth is tracked in `goes_validation_report.md`.
 
 ## Project Overview
 TEJAS is an AI-powered solar flare nowcasting and forecasting platform using combined SoLEXS (Soft X-ray) and HEL1OS (Hard X-ray) observations from the Aditya-L1 mission.

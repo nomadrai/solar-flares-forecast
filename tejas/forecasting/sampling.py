@@ -18,6 +18,7 @@ import pandas as pd
 from tejas.config import (
     DETECTION_DIR,
     FORECAST_DROP_COLUMNS,
+    FORECAST_DROP_COLUMN_PATTERNS,
     FORECAST_MIN_NONNULL_FEATURE_RATIO,
 )
 
@@ -107,7 +108,8 @@ def select_feature_columns(
 ) -> list[str]:
     """Return the deterministic list of feature columns.
 
-    Everything in ``df.columns`` is kept EXCEPT names in the blacklist.
+    Everything in ``df.columns`` is kept EXCEPT names in the blacklist
+    and names ending with any suffix in :data:`FORECAST_DROP_COLUMN_PATTERNS`.
     Ordering is the original column order — deterministic given the same
     input file layout.
 
@@ -120,7 +122,14 @@ def select_feature_columns(
         List of column names safe to feed into a model.
     """
     drop = set(drop_columns) if drop_columns is not None else set(FORECAST_DROP_COLUMNS)
-    return [c for c in df.columns if c not in drop]
+    # Pattern guard: also drop any column ending with a forbidden suffix.
+    # This catches per-instrument metadata variants (*_segment_id, *_stat_err)
+    # that would otherwise bypass the literal blacklist.
+    patterns = FORECAST_DROP_COLUMN_PATTERNS
+    return [
+        c for c in df.columns
+        if c not in drop and not any(c.endswith(pat) for pat in patterns)
+    ]
 
 
 def select_label_column(df: pd.DataFrame, horizon_min: int) -> pd.Series:

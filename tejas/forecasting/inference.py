@@ -23,6 +23,7 @@ import pandas as pd
 from tejas.config import (
     MODELS_DIR,
     FORECAST_DROP_COLUMNS,
+    FORECAST_DROP_COLUMN_PATTERNS,
     FORECAST_LABEL_HORIZONS_MIN,
 )
 from tejas.forecasting.training import load_feature_columns_manifest
@@ -93,6 +94,15 @@ class Forecaster:
             raise ValueError(
                 "Forbidden columns passed to forecaster (label/timestamp "
                 "leakage guard): " + ", ".join(sorted(illegal))
+            )
+
+        # v3 P0 pattern guard: also reject columns ending with forbidden suffixes.
+        patterns = FORECAST_DROP_COLUMN_PATTERNS
+        pattern_matches = [c for c in cols if any(c.endswith(pat) for pat in patterns)]
+        if pattern_matches:
+            raise ValueError(
+                "Forbidden column patterns passed to forecaster "
+                "(metadata leakage guard): " + ", ".join(sorted(pattern_matches))
             )
 
         missing = set(self.feature_columns) - cols

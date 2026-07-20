@@ -290,7 +290,22 @@ FORECAST_DROP_COLUMNS = {
     "label_flare_within_30m_all", "label_flare_within_60m_all",
     # Metadata
     "gti_start",
+    # v3 P0: per-instrument metadata that leaked into the v2 manifest.
+    # Segment IDs count telemetry dumps — they encode *which part of the
+    # month* a row is from (day identity), so the model memorizes active
+    # days instead of learning precursors (cdte_segment_id was the #2 XGB
+    # feature at 30 min).  stat_err is an instrument-noise channel, not
+    # physics.  A suffix guard (FORECAST_DROP_COLUMN_PATTERNS) additionally
+    # blocks any future *_segment_id / *_stat_err variant.
+    "cdte_segment_id", "czt_segment_id",
+    "cdte_stat_err", "czt_stat_err",
 }
+
+# Suffix patterns enforced on top of FORECAST_DROP_COLUMNS in
+# sampling.select_feature_columns and inference.Forecaster: a column whose
+# name ends with one of these can never enter the feature matrix, even if
+# someone forgets to add its literal name to the blacklist above.
+FORECAST_DROP_COLUMN_PATTERNS = ("_segment_id", "_stat_err")
 
 # Rolling-window features produce NaN for the first N-1 samples of each
 # segment.  Rows missing more than (1 - this ratio) of features are dropped
@@ -343,7 +358,12 @@ FORECAST_EARLY_STOPPING_ROUNDS = 60
 #                     positives are scarce).
 # When the requested calibrator cannot be fit (e.g. no val positives) the
 # training path silently falls back to ``"none"`` for that horizon.
-FORECAST_CALIBRATION_METHOD = "isotonic"
+# v3 P0b: switched isotonic → sigmoid.  Isotonic's step function collapsed
+# val probabilities to 3–36 unique values (60m: 37 raw scores → 3), leaving
+# the event-level threshold tuner almost no operating points — most of the
+# duty-cycle budget was unreachable.  Sigmoid is strictly monotonic, so
+# every unique raw score stays a distinct threshold candidate.
+FORECAST_CALIBRATION_METHOD = "sigmoid"
 
 # Evaluation & threshold-optimisation policy.
 #
@@ -454,6 +474,45 @@ GOES_VALIDATION_REPORT      = PROJECT_DIR / "goes_validation_report.md"
 # "precision_at_min_recall".  A horizon absent here falls back to
 # FORECAST_MIN_RECALL.
 FORECAST_MIN_RECALL_PER_HORIZON = {5: 0.80, 15: 0.80, 30: 0.80, 60: 0.80}
+
+# v3 P0: duty-cycle caps for the event-level threshold optimizer.  The v2
+# row-level 0.8 recall floor drove the tuner into an always-on corner (duty
+# cycles 40%/80%/80%/100%).  The new event-level objective maximizes episode
+# precision s.t. event recall ≥ floor AND duty cycle ≤ cap.  The cap makes
+# the 60-min always-on corner infeasible by construction.
+FORECAST_MAX_DUTY_CYCLE_PER_HORIZON = {5: 0.10, 15: 0.15, 30: 0.20, 60: 0.30}
+
+# ── v3 P1: Label surgery (optimization_plan_v3.md §2) ─────────────────────
+# §2.1 GOES-union: GOES flares with no TEJAS counterpart become label events
+# (start anchor = GOES begin_time, tagged source="goes_only") IF Aditya data
+# covers the flare window at or above this fraction of expected rows.
+# Flares below the floor are *not labeled*; their windows go to the §2.3
+# coverage mask instead (their truth is unknowable from the instrument).
+FORECAST_GOES_UNION_MIN_COVERAGE = 0.5
+# Window end fallback when the GOES list has no end_time: peak + this many
+# minutes (typical C-class decay scale).
+FORECAST_GOES_WINDOW_FALLBACK_MIN = 15.0
+# File (in CLASSIFICATION_DIR) listing GOES flare windows with no/degraded
+# Aditya coverage.  Written by scripts/run_credible_relabel.py; consumed at
+# training time to drop in-window rows from the fit (§2.3).
+GOES_UNCOVERED_WINDOWS_NAME = "goes_uncovered_windows.csv"
+
+# §2.2 Ambiguity buffer ("don't-care" band), training fit only: rows with
+# label_minutes_to_next_flare in (h, h + buffer(h)] are excluded from the
+# horizon-h fit.  They are physically near-identical to positives (precursor
+# already underway) yet labeled 0 — pure gradient noise.  buffer(h) =
+# max(5 min, 0.25·h).  Val/test evaluation keeps strict labels — never
+# softened.
+FORECAST_LABEL_AMBIGUITY_BUFFER_MIN = {5: 5.0, 15: 5.0, 30: 7.5, 60: 15.0}
+
+# §2.4 In-flare row policy (A/B ablation flag): exclude decaying-phase
+# in-flare rows from the training fit (the nowcaster owns that regime; the
+# forecast label there reflects sympathetic-flaring statistics, not
+# precursors).  Adopt True only if the val event metrics improve.
+# P1d ablation (2026-07): measured HARMFUL — val event recall/precision
+# dropped at 15/30/60m (e.g. 60m ep_prec 0.727 -> 0.557).  Decaying rows
+# evidently carry real signal about follow-on flares.  Keep False.
+FORECAST_EXCLUDE_DECAYING_FROM_TRAIN = False
 
 # Event-level evaluation (tejas/forecasting/event_metrics.py).  Consecutive
 # alert rows within this gap are merged into one alert "episode" for

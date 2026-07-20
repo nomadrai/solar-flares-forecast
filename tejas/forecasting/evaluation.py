@@ -21,6 +21,8 @@ from tejas.config import (
     FORECAST_TARGET_FAR,
     FORECAST_FBETA,
     FORECAST_MIN_RECALL,
+    FORECAST_MIN_RECALL_PER_HORIZON,
+    FORECAST_MAX_DUTY_CYCLE_PER_HORIZON,
 )
 
 
@@ -243,6 +245,108 @@ def tune_threshold_default(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     to pass the metric name explicitly.
     """
     return tune_threshold(y_true, y_prob, metric=FORECAST_THRESHOLD_METRIC)
+
+
+def tune_threshold_event_level(
+    y_prob: np.ndarray,
+    timestamps: pd.Series,
+    flare_starts: pd.Series,
+    horizon_min: int,
+    grid: np.ndarray | None = None,
+    min_recall: float | None = None,
+    max_duty_cycle: float | None = None,
+    merge_gap_s: int = 300,
+) -> float:
+    """Tune threshold on event-level metrics with a duty-cycle cap.
+
+    v3 P0 — replaces the row-level precision_at_min_recall objective with
+    an event-level one: maximize episode precision s.t. event recall ≥ floor
+    AND alarm duty cycle ≤ cap.  The duty cap makes the always-on corner
+    infeasible.
+
+    Args:
+        y_prob: Predicted probabilities (val split, calibrated).
+        timestamps: Row-aligned datetimes (val split).
+        flare_starts: Ground-truth flare start times inside val window.
+        horizon_min: Horizon in minutes (5/15/30/60).
+        grid: Threshold grid to sweep.  Defaults to a quantile-spaced grid
+            over the calibrated val probabilities (better resolution than
+            a linear 0.01 grid when probs concentrate near 0).
+        min_recall: Event recall floor.  Defaults to
+            FORECAST_MIN_RECALL_PER_HORIZON[horizon_min] or
+            FORECAST_MIN_RECALL if absent.
+        max_duty_cycle: Duty-cycle cap (fraction of val rows above
+            threshold).  Defaults to
+            FORECAST_MAX_DUTY_CYCLE_PER_HORIZON[horizon_min].
+        merge_gap_s: Episode merge gap for computing episode precision
+            (default 300 s).
+
+    Returns:
+        The threshold maximizing episode precision subject to the two
+        constraints.  Falls back to FORECAST_DECISION_THRESHOLD_DEFAULT
+        if no threshold is feasible (e.g. val has zero flares).
+    """
+    from tejas.forecasting.event_metrics import compute_event_metrics
+
+    y_prob = np.asarray(y_prob, dtype=float)
+    if len(y_prob) == 0 or len(flare_starts) == 0:
+        return FORECAST_DECISION_THRESHOLD_DEFAULT
+
+    if min_recall is None:
+        min_recall = float(
+            FORECAST_MIN_RECALL_PER_HORIZON.get(
+                int(horizon_min), FORECAST_MIN_RECALL
+            )
+        )
+    if max_duty_cycle is None:
+        max_duty_cycle = float(
+            FORECAST_MAX_DUTY_CYCLE_PER_HORIZON.get(int(horizon_min), 1.0)
+        )
+
+    if grid is None:
+        # Exhaustive grid: every unique calibrated probability IS a distinct
+        # operating point (thresholds between two unique values yield the
+        # same alert set).  Quantile grids degenerate here — isotonic
+        # calibration collapses probs to a step function with few unique
+        # values, so 50 quantiles can dedup to as few as 3 thresholds,
+        # leaving most of the duty-cap headroom unexplored.
+        uniq = np.unique(y_prob)
+        if len(uniq) > 512:
+            idx = np.unique(np.linspace(0, len(uniq) - 1, 512).round().astype(int))
+            uniq = uniq[idx]
+        grid = uniq
+
+    best_thr = None
+    best_precision = -1.0
+    fallback_thr = FORECAST_DECISION_THRESHOLD_DEFAULT
+    fallback_recall = -1.0
+    fallback_precision = -1.0
+
+    for thr in grid:
+        duty = float((y_prob >= thr).mean())
+        if duty > max_duty_cycle:
+            continue  # violates duty cap
+
+        m = compute_event_metrics(
+            timestamps, y_prob, thr, flare_starts, horizon_min, merge_gap_s
+        )
+        recall = m["event_recall"]
+        precision = m["episode_precision"]
+
+        # Track best duty-feasible fallback: max recall, ties → precision.
+        if recall > fallback_recall or (
+            recall == fallback_recall and precision > fallback_precision
+        ):
+            fallback_recall = recall
+            fallback_precision = precision
+            fallback_thr = float(thr)
+
+        # Feasible: meets recall floor and duty cap
+        if recall >= min_recall and precision >= best_precision:
+            best_precision = precision
+            best_thr = float(thr)
+
+    return best_thr if best_thr is not None else fallback_thr
 
 
 # ── Lead time ──────────────────────────────────────────────────────────────

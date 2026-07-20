@@ -35,6 +35,7 @@ from tejas.config import (
 from tejas.forecasting.evaluation import (
     compute_metrics,
     tune_threshold,
+    tune_threshold_event_level,
 )
 from tejas.forecasting.models import (
     ALGORITHMS,
@@ -42,6 +43,113 @@ from tejas.forecasting.models import (
     make_model,
 )
 from tejas.forecasting.splits import build_split_arrays
+
+
+# ── v3 P1: training-fit row exclusions (label surgery §2.2–§2.4) ──────────
+
+
+def load_uncovered_goes_windows(path: Path | None = None) -> pd.DataFrame:
+    """GOES flare windows with no/degraded Aditya coverage (§2.3).
+
+    Written by ``scripts/run_credible_relabel.py``.  Missing file → empty
+    frame (no coverage masking), so pre-P1 pipelines keep working.
+    """
+    if path is None:
+        from tejas.config import CLASSIFICATION_DIR, GOES_UNCOVERED_WINDOWS_NAME
+
+        path = Path(CLASSIFICATION_DIR) / GOES_UNCOVERED_WINDOWS_NAME
+    if not Path(path).exists():
+        return pd.DataFrame(columns=["begin_time", "end_time"])
+    out = pd.read_csv(path)
+    for col in ("begin_time", "end_time"):
+        if col in out.columns:
+            out[col] = pd.to_datetime(out[col])
+    return out
+
+
+def build_train_exclusion_mask(
+    df: pd.DataFrame,
+    split_labels: pd.Series,
+    horizon_min: int,
+    buffer_min: float | None = None,
+    uncovered_windows: pd.DataFrame | None = None,
+    exclude_decaying: bool | None = None,
+) -> tuple[np.ndarray, dict]:
+    """Boolean mask of rows to EXCLUDE from the horizon-h training fit.
+
+    v3 P1 label surgery — three train-only exclusions (val/test evaluation
+    always keeps every row and its strict label):
+
+      §2.2 ambiguity buffer — ``label_minutes_to_next_flare`` in
+          ``(h, h + buffer]``: physically near-positive rows labeled 0.
+      §2.3 coverage mask — rows inside a GOES-confirmed flare window that
+          Aditya did not observe: label unknowable, currently a wrong
+          negative.
+      §2.4 decaying in-flare rows — behind ``exclude_decaying`` (A/B flag
+          ``FORECAST_EXCLUDE_DECAYING_FROM_TRAIN``).
+
+    Returns:
+        (mask aligned to ``df`` — True = drop from fit, counts dict).
+        The mask is always False outside the train split.
+    """
+    from tejas.config import (
+        FORECAST_LABEL_AMBIGUITY_BUFFER_MIN,
+        FORECAST_EXCLUDE_DECAYING_FROM_TRAIN,
+    )
+
+    if buffer_min is None:
+        buffer_min = FORECAST_LABEL_AMBIGUITY_BUFFER_MIN.get(int(horizon_min), 0.0)
+    if exclude_decaying is None:
+        exclude_decaying = FORECAST_EXCLUDE_DECAYING_FROM_TRAIN
+    if uncovered_windows is None:
+        uncovered_windows = load_uncovered_goes_windows()
+
+    train_mask = (split_labels == "train").to_numpy()
+    n = len(df)
+    buffer_excl = np.zeros(n, dtype=bool)
+    coverage_excl = np.zeros(n, dtype=bool)
+    decay_excl = np.zeros(n, dtype=bool)
+
+    # §2.2 — don't-care band (h, h + buffer]
+    if buffer_min > 0 and "label_minutes_to_next_flare" in df.columns:
+        minutes = pd.to_numeric(
+            df["label_minutes_to_next_flare"], errors="coerce"
+        ).to_numpy()
+        h = float(horizon_min)
+        with np.errstate(invalid="ignore"):
+            buffer_excl = (minutes > h) & (minutes <= h + float(buffer_min))
+        buffer_excl &= train_mask
+
+    # §2.3 — unobserved GOES flare windows
+    if len(uncovered_windows) and "datetime" in df.columns:
+        ts = df["datetime"].to_numpy()
+        for _, w in uncovered_windows.iterrows():
+            begin = np.datetime64(pd.Timestamp(w["begin_time"]))
+            end = np.datetime64(pd.Timestamp(w["end_time"]))
+            coverage_excl |= (ts >= begin) & (ts <= end)
+        coverage_excl &= train_mask
+
+    # §2.4 — decaying in-flare rows (ablation flag)
+    if exclude_decaying and "flare_phase" in df.columns:
+        active = (
+            pd.to_numeric(df.get("is_flare_active", 0), errors="coerce")
+            .fillna(0)
+            .to_numpy()
+            .astype(int)
+            if "is_flare_active" in df.columns
+            else np.ones(n, dtype=int)
+        )
+        decay_excl = (active == 1) & (df["flare_phase"].astype(str) == "decaying").to_numpy()
+        decay_excl &= train_mask
+
+    mask = buffer_excl | coverage_excl | decay_excl
+    counts = {
+        "buffer": int(buffer_excl.sum()),
+        "coverage": int(coverage_excl.sum()),
+        "decaying": int(decay_excl.sum()),
+        "total": int(mask.sum()),
+    }
+    return mask, counts
 
 
 # ── Single-horizon training ─────────────────────────────────────────────────
@@ -73,7 +181,24 @@ def train_one_horizon(
         ``n_positive_train``, ``scale_pos_weight``, ``training_seconds``.
     """
     label_col = f"{label_prefix}_{horizon_min}m"
-    arrays = build_split_arrays(df, feature_cols, label_col, split_labels)
+
+    # v3 P1 label surgery: drop ambiguity-buffer / unobserved-GOES-window /
+    # (optionally) decaying rows from the FIT ONLY.  Val/test keep every row
+    # and its strict label — the excluded rows simply leave the train split.
+    excl_mask, excl_counts = build_train_exclusion_mask(
+        df, split_labels, horizon_min
+    )
+    fit_split_labels = split_labels.copy()
+    if excl_counts["total"]:
+        fit_split_labels[excl_mask] = "train_excluded"
+        print(
+            f"    train-excl[{horizon_min}m]: buffer={excl_counts['buffer']}  "
+            f"coverage={excl_counts['coverage']}  "
+            f"decaying={excl_counts['decaying']}  "
+            f"total={excl_counts['total']}"
+        )
+
+    arrays = build_split_arrays(df, feature_cols, label_col, fit_split_labels)
 
     X_tr, y_tr = arrays["X_train"], arrays["y_train"]
     X_val, y_val = arrays["X_val"], arrays["y_val"]
@@ -95,17 +220,66 @@ def train_one_horizon(
     val_prob = _apply_calibrator(calibrator, val_prob_raw)
     test_prob = _apply_calibrator(calibrator, test_prob_raw)
 
-    # Threshold optimisation (config-selected metric — see
-    # FORECAST_THRESHOLD_METRIC).  Under "precision_at_min_recall" the
-    # recall floor may vary per horizon (FORECAST_MIN_RECALL_PER_HORIZON).
-    from tejas.config import FORECAST_MIN_RECALL_PER_HORIZON
-
-    threshold = tune_threshold(
-        y_val,
-        val_prob,
-        metric=FORECAST_THRESHOLD_METRIC,
-        min_recall=FORECAST_MIN_RECALL_PER_HORIZON.get(int(horizon_min)),
+    # v3 P0b: Event-level threshold tuning with duty-cycle caps.
+    # Extract val timestamps and flare starts for episode-based optimization.
+    from tejas.config import (
+        FORECAST_MIN_RECALL_PER_HORIZON,
+        FORECAST_MAX_DUTY_CYCLE_PER_HORIZON,
+        CLASSIFICATION_DIR,
+        CREDIBLE_CATALOGUE_NAME,
     )
+
+    val_mask = split_labels == "val"
+    val_timestamps = df.loc[val_mask, "datetime"].reset_index(drop=True)
+
+    # Credible flare starts *inside the val window* — compute_event_metrics
+    # expects pre-windowed starts; out-of-window flares would dilute recall.
+    credible_path = Path(CLASSIFICATION_DIR) / CREDIBLE_CATALOGUE_NAME
+    flare_starts = pd.Series([], dtype="datetime64[ns]")
+    if credible_path.exists() and len(val_timestamps) > 0:
+        credible = pd.read_csv(credible_path)
+        starts = pd.to_datetime(credible["start_time"])
+        t0, t1 = val_timestamps.min(), val_timestamps.max()
+        flare_starts = (
+            starts[(starts >= t0) & (starts <= t1)]
+            .sort_values()
+            .reset_index(drop=True)
+        )
+    if len(flare_starts) == 0:
+        # Loud fallback — an empty flare list silently degrades the tuner
+        # to the default threshold.
+        print(
+            f"    [WARN] horizon={horizon_min}m: no credible flares in val "
+            f"window ({credible_path}) — event-level tuner falls back to "
+            f"default threshold"
+        )
+
+    threshold = tune_threshold_event_level(
+        y_prob=val_prob,
+        timestamps=val_timestamps,
+        flare_starts=flare_starts,
+        horizon_min=int(horizon_min),
+        min_recall=FORECAST_MIN_RECALL_PER_HORIZON.get(int(horizon_min)),
+        max_duty_cycle=FORECAST_MAX_DUTY_CYCLE_PER_HORIZON.get(int(horizon_min)),
+    )
+
+    # Log the tuner's operating point on val — FEASIBLE means the recall
+    # floor was met under the duty cap; FALLBACK means the floor was
+    # unreachable and the max-recall duty-feasible threshold was used.
+    if len(flare_starts) > 0:
+        from tejas.forecasting.event_metrics import compute_event_metrics
+
+        _m = compute_event_metrics(
+            val_timestamps, val_prob, threshold, flare_starts, int(horizon_min)
+        )
+        _duty = float((np.asarray(val_prob) >= threshold).mean())
+        _floor = FORECAST_MIN_RECALL_PER_HORIZON.get(int(horizon_min), 0.0)
+        _verdict = "FEASIBLE" if _m["event_recall"] >= _floor else "FALLBACK"
+        print(
+            f"    tuner[{_verdict}] thr={threshold:.4f}  duty={_duty:.3f}  "
+            f"ev_recall={_m['event_recall']:.3f} (floor {_floor})  "
+            f"ep_prec={_m['episode_precision']:.3f}"
+        )
     val_metrics = compute_metrics(y_val, val_prob, threshold=threshold)
     test_metrics = compute_metrics(y_te, test_prob, threshold=threshold)
 
@@ -135,6 +309,10 @@ def train_one_horizon(
         "n_train": int(len(y_tr)),
         "n_val": int(len(y_val)),
         "n_test": int(len(y_te)),
+        "n_train_excluded": int(excl_counts["total"]),
+        "n_train_excluded_buffer": int(excl_counts["buffer"]),
+        "n_train_excluded_coverage": int(excl_counts["coverage"]),
+        "n_train_excluded_decaying": int(excl_counts["decaying"]),
         "n_positive_train": n_pos_tr,
         "scale_pos_weight": float(spw_raw),
         "scale_pos_weight_effective": float(spw_effective),
@@ -387,6 +565,7 @@ def _flatten_result(result: dict) -> dict:
         "n_train": result["n_train"],
         "n_val": result["n_val"],
         "n_test": result["n_test"],
+        "n_train_excluded": result.get("n_train_excluded", 0),
         "n_positive_train": result["n_positive_train"],
         "scale_pos_weight": result["scale_pos_weight"],
         "decision_threshold": result["decision_threshold"],

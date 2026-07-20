@@ -54,11 +54,59 @@ def credible_mask(catalogue):
 def build_credible_catalogue(catalogue):
     """Return the credible subset of the catalogue (copy, index reset).
 
-    Adds an ``is_credible`` column to the returned frame for transparency.
+    Adds an ``is_credible`` column to the returned frame for transparency,
+    and a ``source`` column ("tejas") so §2.1 GOES-union rows appended by
+    :func:`append_goes_only` are distinguishable.
     """
     mask = credible_mask(catalogue)
     out = catalogue.loc[mask].copy().reset_index(drop=True)
     out["is_credible"] = True
+    out["source"] = "tejas"
+    return out
+
+
+def append_goes_only(credible, goes_only_df):
+    """Append coverage-verified GOES-only flares as label events (v3 §2.1).
+
+    GOES flares with no TEJAS counterpart are systematic label false
+    negatives: real flares the forecaster is currently *penalized* for
+    predicting.  Labels are retrospective training targets, so externally
+    confirmed events are legitimate — nothing enters inference inputs.
+
+    Args:
+        credible: output of :func:`build_credible_catalogue`.
+        goes_only_df: GOES flares to append.  Needs ``begin_time`` (the
+            start anchor — the conservative choice for lead time),
+            ``peak_time``; optional ``end_time`` and ``goes_class``.
+            Coverage verification is the *caller's* job (§2.3): pass only
+            flares whose window Aditya actually observed.
+
+    Returns:
+        credible ∪ goes_only, sorted by ``start_time``, index reset.
+        Appended rows carry ``source="goes_only"``, ``is_credible=True``,
+        ``goes_matched=True`` and a ``goes_only_<n>`` event_id.
+    """
+    if goes_only_df is None or len(goes_only_df) == 0:
+        return credible
+
+    n = len(goes_only_df)
+    rows = pd.DataFrame({
+        "event_id": [f"goes_only_{i:03d}" for i in range(n)],
+        "start_time": pd.to_datetime(goes_only_df["begin_time"]).values,
+        "peak_time": pd.to_datetime(goes_only_df["peak_time"]).values,
+        "goes_matched": [True] * n,
+        "is_credible": [True] * n,
+        "source": ["goes_only"] * n,
+    })
+    if "end_time" in goes_only_df.columns:
+        rows["end_time"] = pd.to_datetime(goes_only_df["end_time"]).values
+    if "goes_class" in goes_only_df.columns:
+        rows["goes_class"] = goes_only_df["goes_class"].values
+
+    out = pd.concat([credible, rows], ignore_index=True)
+    # Ensure start_time is datetime (could be str from CSV)
+    out["start_time"] = pd.to_datetime(out["start_time"])
+    out = out.sort_values("start_time").reset_index(drop=True)
     return out
 
 
